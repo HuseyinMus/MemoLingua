@@ -1,0 +1,7 @@
+{
+  "name": "MemoLingua",
+  "description": "A scientific English vocabulary learning app using Spaced Repetition and AI-generated context.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
