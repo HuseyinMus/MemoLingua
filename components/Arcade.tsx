@@ -1,11 +1,13 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Trophy, Swords, Zap, Users, Timer, Star, Crown, Flame, ArrowRight, X, ArrowLeft, Check, Play, Shield, Heart, Skull, Target } from 'lucide-react';
+import { Trophy, Swords, Zap, Users, Timer, Star, Crown, Flame, ArrowRight, X, ArrowLeft, Check, Play, Shield, Heart, Skull, Target, Calendar, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { LeaderboardEntry, GameEvent, GameMode, UserProfile, UserWord } from '../types';
 
 interface ArcadeProps {
     userProfile: UserProfile | null;
     words: UserWord[];
     onAddXP: (amount: number) => void;
+    leaderboardData?: LeaderboardEntry[]; // Accept external data if needed, or use profile
 }
 
 // Fallback words if user has none
@@ -19,7 +21,7 @@ const FALLBACK_WORDS = [
     { id: 'f7', term: 'Solitude', translation: 'Yalnızlık', definition: 'The state or situation of being alone' },
 ];
 
-export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) => {
+export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP, leaderboardData }) => {
     const [tab, setTab] = useState<'games' | 'leaderboard'>('games');
     const [activeGame, setActiveGame] = useState<'none' | 'duel' | 'blitz'>('none');
     const [gameState, setGameState] = useState<'lobby' | 'playing' | 'result'>('lobby');
@@ -40,7 +42,6 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
     // Duel Specific: Health System
     const [playerHP, setPlayerHP] = useState(100);
     const [botHP, setBotHP] = useState(100);
-    const [round, setRound] = useState(0);
     
     // Use ReturnType to avoid NodeJS namespace dependency in browser environment
     const gameTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -71,7 +72,6 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
             setTotalTime(time);
             setPlayerHP(100);
             setBotHP(100);
-            setRound(1);
         }
         
         nextQuestion();
@@ -232,9 +232,9 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                         </div>
                     )}
                     
-                    <h2 className="text-4xl font-black mb-1 tracking-tighter">{isWin ? 'VICTORY!' : 'DEFEATED'}</h2>
+                    <h2 className="text-4xl font-black mb-1 tracking-tighter">{isWin ? 'ZAFER!' : 'YENİLGİ'}</h2>
                     <p className="text-zinc-500 dark:text-zinc-400 font-medium text-lg">
-                        {activeGame === 'blitz' ? 'Time is up!' : playerHP > 0 ? 'You defeated the bot!' : 'Better luck next time.'}
+                        {activeGame === 'blitz' ? 'Süre doldu!' : playerHP > 0 ? 'Botu yendin!' : 'Bir dahaki sefere...'}
                     </p>
                 </div>
 
@@ -242,19 +242,19 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                 <div className="bg-zinc-50 dark:bg-zinc-900 rounded-[2rem] p-6 mb-6 border border-zinc-100 dark:border-zinc-800">
                      <div className="grid grid-cols-2 gap-4 text-center">
                          <div>
-                             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Score</p>
+                             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Puan</p>
                              <p className="text-3xl font-black">{score}</p>
                          </div>
                          <div>
-                             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">XP Earned</p>
+                             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">XP Kazanılan</p>
                              <p className="text-3xl font-black text-yellow-500">+{Math.floor(score / 10)}</p>
                          </div>
                      </div>
                      {activeGame === 'blitz' && (
                          <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800 text-center">
-                             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Max Combo</p>
+                             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Maksimum Seri</p>
                              <p className="text-xl font-bold flex items-center justify-center gap-1 text-orange-500">
-                                 <Flame size={18} fill="currentColor" /> {maxCombo}x Streak
+                                 <Flame size={18} fill="currentColor" /> {maxCombo}x Seri
                              </p>
                          </div>
                      )}
@@ -263,7 +263,7 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                 {/* Mistakes Review */}
                 {mistakes.length > 0 && (
                     <div className="mb-8">
-                        <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-4">Mistakes to Review</h3>
+                        <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-4">Hataları Gözden Geçir</h3>
                         <div className="space-y-3">
                             {mistakes.map((m, i) => (
                                 <div key={i} className="bg-red-50 dark:bg-red-900/10 p-4 rounded-2xl border border-red-100 dark:border-red-900/30 flex items-center justify-between">
@@ -284,7 +284,7 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                 )}
 
                 <button onClick={exitGame} className="w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold shadow-xl active:scale-95 transition-transform mt-auto">
-                    Return to Arena
+                    Arena'ya Dön
                 </button>
             </div>
         );
@@ -317,7 +317,7 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                          <div className="text-3xl font-black font-mono tracking-tight">{score}</div>
                          {activeGame === 'blitz' && combo > 1 && (
                              <div className="flex items-center gap-1 text-orange-500 font-bold text-sm animate-bounce">
-                                 <Flame size={14} fill="currentColor" /> {combo}x COMBO
+                                 <Flame size={14} fill="currentColor" /> {combo}x SERİ
                              </div>
                          )}
                      </div>
@@ -330,9 +330,9 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                     <div className="flex justify-between items-center mb-8 px-2">
                         {/* Player */}
                         <div className="flex flex-col items-center gap-2">
-                            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center border-2 border-blue-500 relative overflow-hidden">
+                            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center border-2 border-blue-500 relative overflow-hidden text-3xl">
                                 {playerHP < 30 && <div className="absolute inset-0 bg-red-500/20 animate-pulse"></div>}
-                                <span className="text-2xl">👤</span>
+                                {userProfile?.avatar || '👤'}
                             </div>
                             <div className="w-20 h-2 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
                                 <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${playerHP}%` }}></div>
@@ -357,7 +357,7 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                 <div className="flex-1 flex flex-col justify-center relative z-10">
                     <div className="text-center mb-8">
                         <div className="inline-block px-3 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-xs font-bold uppercase tracking-widest mb-4">
-                            Translate
+                            Çevir
                         </div>
                         <h2 className="text-4xl font-black mb-4 tracking-tight drop-shadow-sm">{currentQuestion.term}</h2>
                     </div>
@@ -398,23 +398,33 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
     if (gameState === 'playing') return renderGameInterface();
     if (gameState === 'result') return renderGameResult();
 
-    // Mock Leaderboard Data
-    const leaderboard: LeaderboardEntry[] = [
+    // Mock Leaderboard Data with fallback to Profile data for "You"
+    const leaderboard: LeaderboardEntry[] = leaderboardData || [
         { id: '1', name: 'Elara V.', xp: 15400, avatar: '👑', rank: 1 },
         { id: '2', name: 'Jaxon S.', xp: 14200, avatar: '🦁', rank: 2 },
-        { id: '3', name: 'You', xp: userProfile?.xp || 0, avatar: '👤', rank: 3, isCurrentUser: true },
+        { 
+            id: '3', 
+            name: 'Sen', 
+            xp: userProfile?.xp || 0, 
+            avatar: userProfile?.avatar || '👤', 
+            rank: 3, 
+            isCurrentUser: true 
+        },
         { id: '4', name: 'Sarah K.', xp: 8900, avatar: '🦊', rank: 4 },
         { id: '5', name: 'Mike R.', xp: 7500, avatar: '🐼', rank: 5 },
-    ].sort((a, b) => b.xp - a.xp);
-
-    const events: GameEvent[] = [
-        { id: 'e1', title: 'Weekend Rush', description: 'Double XP active', expiresIn: '2d 14h', type: 'boost', color: 'bg-indigo-600' },
-        { id: 'e2', title: 'Vocab Marathon', description: 'Global Challenge', expiresIn: '12h', type: 'challenge', color: 'bg-orange-600' },
     ];
+    
+    // Sort just in case local data update shifted things
+    leaderboard.sort((a, b) => b.xp - a.xp);
 
     const games: GameMode[] = [
-        { id: 'duel', title: 'Word Duel', description: 'Defeat the bot to win XP', icon: Swords, players: '1.2k playing', status: 'active' },
-        { id: 'blitz', title: 'Speed Blitz', description: '60s Combo Challenge', icon: Zap, players: '850 playing', status: 'active' },
+        { id: 'duel', title: 'Kelime Düellosu', description: 'XP için botla savaş', icon: Swords, players: '1.2k oynuyor', status: 'active' },
+        { id: 'blitz', title: 'Hız Modu', description: '60sn Kombo Yarışı', icon: Zap, players: '850 oynuyor', status: 'active' },
+    ];
+
+    const dailyQuests = [
+        { id: 'q1', title: 'Çalışkan Arı', desc: 'Bir tekrar oturumunu tamamla', reward: 50, completed: (userProfile?.wordsStudiedToday || 0) > 0 },
+        { id: 'q2', title: 'Keskin Nişancı', desc: 'Duel modunda botu yen', reward: 100, completed: false }, // Mocked for now
     ];
 
     return (
@@ -424,12 +434,12 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h2 className="text-4xl font-black text-black dark:text-white tracking-tighter">Arena</h2>
-                        <p className="text-zinc-500 dark:text-zinc-400 font-medium">Compete & Win</p>
+                        <p className="text-zinc-500 dark:text-zinc-400 font-medium">Yarış & Kazan</p>
                     </div>
                     {/* League Badge */}
                     <div className="bg-gradient-to-r from-yellow-200 to-yellow-400 text-yellow-900 px-3 py-1.5 rounded-full text-xs font-bold border border-yellow-300 flex items-center gap-1.5 shadow-sm">
                         <Trophy size={14} fill="currentColor" />
-                        Gold League
+                        {userProfile?.league || 'Ligi'}
                     </div>
                 </div>
 
@@ -438,13 +448,13 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                         onClick={() => setTab('games')}
                         className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${tab === 'games' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg scale-100' : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'}`}
                     >
-                        Games
+                        Oyunlar
                     </button>
                     <button 
                         onClick={() => setTab('leaderboard')}
                         className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${tab === 'leaderboard' ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg scale-100' : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'}`}
                     >
-                        Rankings
+                        Sıralama
                     </button>
                 </div>
             </div>
@@ -452,6 +462,29 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
             <div className="flex-1 overflow-y-auto px-6 py-6 scrollbar-hide">
                 {tab === 'games' ? (
                     <div className="space-y-8 animate-fade-in">
+                        {/* Daily Quests Section */}
+                        <section>
+                            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4">Günlük Görevler</h3>
+                            <div className="grid grid-cols-1 gap-3">
+                                {dailyQuests.map(quest => (
+                                    <div key={quest.id} className={`p-4 rounded-2xl border flex items-center justify-between ${quest.completed ? 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-900/30' : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800'}`}>
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${quest.completed ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400'}`}>
+                                                {quest.completed ? <Check size={20} /> : <Target size={20} />}
+                                            </div>
+                                            <div>
+                                                <h4 className={`font-bold text-sm ${quest.completed ? 'text-green-700 dark:text-green-400' : 'text-black dark:text-white'}`}>{quest.title}</h4>
+                                                <p className="text-xs text-zinc-500">{quest.desc}</p>
+                                            </div>
+                                        </div>
+                                        <div className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2 py-1 rounded text-xs font-bold flex items-center gap-1">
+                                            +{quest.reward} XP
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+
                         {/* Daily Challenge Card */}
                         <section className="bg-gradient-to-br from-black to-zinc-800 dark:from-zinc-800 dark:to-black rounded-[2.5rem] p-6 text-white relative overflow-hidden shadow-xl">
                             <div className="absolute top-0 right-0 p-8 opacity-10">
@@ -459,48 +492,22 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                             </div>
                             <div className="relative z-10">
                                 <div className="inline-block px-3 py-1 bg-white/10 backdrop-blur-md rounded-lg text-[10px] font-bold uppercase tracking-widest mb-3 border border-white/20">
-                                    Daily Challenge
+                                    Günün Meydan Okuması
                                 </div>
-                                <h3 className="text-2xl font-bold mb-1">Perfect Streak</h3>
-                                <p className="text-zinc-400 text-sm mb-6">Get 5 correct answers in a row in Blitz.</p>
+                                <h3 className="text-2xl font-bold mb-1">Kusursuz Seri</h3>
+                                <p className="text-zinc-400 text-sm mb-6">Blitz modunda art arda 5 doğru cevap ver.</p>
                                 <div className="h-2 w-full bg-white/10 rounded-full mb-4 overflow-hidden">
                                     <div className="h-full bg-green-500 w-2/5"></div>
                                 </div>
                                 <button className="w-full bg-white text-black py-3 rounded-xl text-xs font-bold shadow-lg hover:scale-[1.02] transition-transform">
-                                    Claim 50 XP
+                                    50 XP Al
                                 </button>
-                            </div>
-                        </section>
-
-                        {/* Events Section */}
-                        <section>
-                            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <Flame size={14} className="text-orange-500 fill-orange-500" /> Live Events
-                            </h3>
-                            <div className="flex gap-4 overflow-x-auto pb-4 -mx-6 px-6 scrollbar-hide">
-                                {events.map(event => (
-                                    <div key={event.id} className={`${event.color} min-w-[280px] p-6 rounded-[2rem] text-white shadow-xl relative overflow-hidden group hover:scale-[1.02] transition-transform cursor-pointer`}>
-                                        <div className="absolute -top-4 -right-4 p-4 opacity-10 rotate-12 group-hover:rotate-45 transition-transform duration-700">
-                                            <Star size={120} fill="white" />
-                                        </div>
-                                        <div className="relative z-10">
-                                            <div className="bg-black/20 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold inline-block mb-3 border border-white/10">
-                                                Ends in {event.expiresIn}
-                                            </div>
-                                            <h4 className="text-2xl font-bold mb-1 tracking-tight">{event.title}</h4>
-                                            <p className="text-white/80 text-sm font-medium mb-6">{event.description}</p>
-                                            <div className="flex items-center gap-2 text-xs font-bold bg-black/20 w-fit px-3 py-2 rounded-xl backdrop-blur-sm">
-                                                <Zap size={14} /> +XP Boost Active
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
                             </div>
                         </section>
 
                         {/* Games Grid */}
                         <section>
-                            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4">Quick Play</h3>
+                            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4">Hızlı Oyna</h3>
                             <div className="grid grid-cols-1 gap-4">
                                 {games.map(game => (
                                     <button 
@@ -532,13 +539,13 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                          {/* League Progress */}
                          <div className="bg-white dark:bg-zinc-900 rounded-[2rem] p-6 border border-zinc-100 dark:border-zinc-800 shadow-sm mb-6">
                              <div className="flex justify-between items-end mb-2">
-                                 <h3 className="font-bold text-black dark:text-white">Promotion Zone</h3>
-                                 <span className="text-xs font-bold text-green-500">Top 5 promote</span>
+                                 <h3 className="font-bold text-black dark:text-white">Lig Yükselmesi</h3>
+                                 <span className="text-xs font-bold text-green-500">İlk 5 yükselir</span>
                              </div>
                              <div className="h-3 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                                  <div className="h-full bg-green-500 w-3/5"></div>
                              </div>
-                             <p className="text-xs text-zinc-400 mt-2 text-center">2 days left in season</p>
+                             <p className="text-xs text-zinc-400 mt-2 text-center">Sezon bitimine 2 gün kaldı</p>
                          </div>
 
                         {/* Top 3 Podium */}
@@ -547,7 +554,7 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                                 <Crown size={150} />
                             </div>
                             <div className="relative z-10">
-                                <p className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mb-4">League Leader</p>
+                                <p className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mb-4">Lig Lideri</p>
                                 <div className="w-24 h-24 bg-gradient-to-tr from-yellow-300 to-yellow-500 rounded-full mx-auto mb-4 flex items-center justify-center text-5xl shadow-[0_0_30px_rgba(250,204,21,0.4)] border-4 border-zinc-800">
                                     {leaderboard[0].avatar}
                                 </div>
@@ -564,12 +571,12 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP }) =
                                     className={`flex items-center gap-4 p-5 border-b border-zinc-50 dark:border-zinc-800 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors ${user.isCurrentUser ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
                                 >
                                     <div className={`w-8 font-bold text-center font-mono ${index < 3 ? 'text-black dark:text-white text-lg' : 'text-zinc-300 text-sm'}`}>#{user.rank}</div>
-                                    <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-xl border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                                    <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm">
                                         {user.avatar}
                                     </div>
                                     <div className="flex-1">
                                         <p className={`font-bold text-base ${user.isCurrentUser ? 'text-blue-700 dark:text-blue-400' : 'text-zinc-900 dark:text-zinc-200'}`}>
-                                            {user.name} {user.isCurrentUser && '(You)'}
+                                            {user.name} {user.isCurrentUser && '(Sen)'}
                                         </p>
                                     </div>
                                     <div className="font-mono font-bold text-sm text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-md">

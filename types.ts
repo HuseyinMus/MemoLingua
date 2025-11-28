@@ -28,13 +28,14 @@ export enum AppView {
   ONBOARDING = 'ONBOARDING',
   DASHBOARD = 'DASHBOARD',
   STUDY = 'STUDY',
-  DISCOVER = 'DISCOVER',
+  DISCOVER = 'DISCOVER', // Restore DISCOVER for Word Generation
+  STORIES = 'STORIES',
   PROFILE = 'PROFILE',
   ARENA = 'ARENA',
   SETTINGS = 'SETTINGS',
 }
 
-export type StudyMode = 'meaning' | 'context' | 'writing' | 'speaking';
+export type StudyMode = 'meaning' | 'context' | 'writing' | 'speaking' | 'translation';
 
 // User Profile Types
 export type UserLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
@@ -44,7 +45,8 @@ export type AppTheme = 'light' | 'dark' | 'system';
 export interface UserProfile {
   uid?: string; // Firebase Auth ID
   email?: string;
-  username?: string; // Added username
+  username?: string;
+  avatar: string; // Selected Avatar Emoji
   level: UserLevel;
   goal: UserGoal;
   hasCompletedOnboarding: boolean;
@@ -56,6 +58,9 @@ export interface UserProfile {
   lastStudyDate: string; // Date string to track daily resets
   xp: number; // Gamification Experience Points
   streakFreeze: number; // Number of freezes available
+  streak: number; // Current streak
+  longestStreak: number; // Best streak
+  league: UserLeague;
   theme: AppTheme;
   settings: {
     autoPlayAudio: boolean;
@@ -63,6 +68,8 @@ export interface UserProfile {
     soundEffects: boolean;
   };
 }
+
+export type UserLeague = 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond';
 
 export interface Achievement {
   id: string;
@@ -72,14 +79,18 @@ export interface Achievement {
   unlocked: boolean;
   progress: number;
   maxProgress: number;
+  type?: 'streak' | 'xp' | 'count'; // Added optional type for better handling
 }
 
 export interface GeneratedStory {
   id: string;
   title: string;
-  content: string;
+  content: string; // Markdown/Text content
+  genre: string; // e.g., 'Sci-Fi', 'Mystery'
+  level: string;
+  coverGradient: string; // CSS class for gradient
   date: number;
-  wordIds: string[];
+  vocabulary: WordData[]; // Pre-generated vocabulary from the story
 }
 
 // Gamification Types

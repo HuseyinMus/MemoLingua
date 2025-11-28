@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Home, Sparkles, BookOpen, Trophy } from 'lucide-react';
+import { Home, Sparkles, BookOpen, Trophy, Book, Search } from 'lucide-react';
 import { AppView } from '../types';
 
 interface NavigationProps {
@@ -12,12 +12,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) 
   const navItems = [
     { view: AppView.DASHBOARD, icon: Home, label: 'Home', id: 'nav-dashboard' },
     { view: AppView.STUDY, icon: BookOpen, label: 'Review', id: 'nav-review' },
+    { view: AppView.DISCOVER, icon: Search, label: 'Kelime', id: 'nav-discover' }, // Word Generation
+    { view: AppView.STORIES, icon: Book, label: 'Stories', id: 'nav-stories' }, // Story Library
     { view: AppView.ARENA, icon: Trophy, label: 'Arena', id: 'nav-arena' },
-    { view: AppView.DISCOVER, icon: Sparkles, label: 'Add', id: 'nav-discover' },
   ];
 
   return (
-    <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
+    <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-2 pointer-events-none">
       <div className="bg-black/90 dark:bg-white/10 backdrop-blur-xl text-white rounded-[2rem] px-2 py-4 shadow-2xl shadow-black/20 dark:shadow-black/50 pointer-events-auto flex items-center justify-around border border-white/10 dark:border-white/5 max-w-sm w-full transition-colors duration-300">
         {navItems.map((item) => {
           const isActive = currentView === item.view;
@@ -28,11 +29,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) 
               key={item.view}
               id={item.id}
               onClick={() => setView(item.view)}
-              className="relative flex flex-col items-center justify-center w-16 h-12 group"
+              className="relative flex flex-col items-center justify-center w-14 h-12 group"
             >
               {/* Active Background Pill */}
               {isActive && (
-                  <div className="absolute inset-0 bg-white/10 dark:bg-white/20 rounded-xl animate-fade-in mx-2" />
+                  <div className="absolute inset-0 bg-white/10 dark:bg-white/20 rounded-xl animate-fade-in mx-1" />
               )}
               
               <Icon 

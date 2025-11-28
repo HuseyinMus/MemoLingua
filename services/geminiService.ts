@@ -56,9 +56,6 @@ export const generateSingleWord = async (term: string, level: UserLevel): Promis
 };
 
 export const generateDailyBatch = async (count: number, level: UserLevel, goal: UserGoal, existingWords: string[]): Promise<WordData[]> => {
-    
-    // We provide a sample of existing words to avoid duplicates if possible, 
-    // though with a large context window we can just ask it to be creative.
     const prompt = `Generate exactly ${count} unique English vocabulary words for a student at '${level}' level who is interested in '${goal}'.
     
     Do NOT include these words: ${existingWords.slice(0, 50).join(', ')}.
@@ -102,7 +99,6 @@ export const generateDailyBatch = async (count: number, level: UserLevel, goal: 
     if (!text) throw new Error("No response");
 
     try {
-        // Clean markdown if present
         const cleanText = text.replace(/```json/g, '').replace(/```/g, '');
         const list = JSON.parse(cleanText);
         return list.map((item: any) => ({ ...item, id: crypto.randomUUID() }));
@@ -112,13 +108,22 @@ export const generateDailyBatch = async (count: number, level: UserLevel, goal: 
     }
 };
 
-export const generateStoryFromWords = async (words: WordData[], level: UserLevel): Promise<Omit<GeneratedStory, 'id' | 'date'>> => {
-    const terms = words.map(w => w.term).join(', ');
+// New Robust Story Generation
+export const generateContextualStory = async (level: UserLevel, goal: UserGoal): Promise<Omit<GeneratedStory, 'id' | 'date'>> => {
+    const prompt = `Write a short, engaging story (approx 150 words) suitable for an English learner at ${level} level. 
+    The story theme should be related to: ${goal} (or general interesting fiction).
     
-    const prompt = `Write a short, engaging story (approx 150 words) suitable for an English learner at ${level} level.
-    You MUST use the following words in the story: ${terms}.
-    Highlight the used words in the story by wrapping them in **double asterisks**.
-    Provide a catchy title.`;
+    Also, identify 5-7 key vocabulary words from the story and provide their details.
+    
+    Return JSON structure:
+    {
+      "title": "Story Title",
+      "genre": "Genre Name (e.g. Sci-Fi, Travel)",
+      "content": "Full story text...",
+      "vocabulary": [
+         { "term": "word", "translation": "turkish", "definition": "english def", "exampleSentence": "sentence from story", "type": "noun", "pronunciation": "IPA", "phoneticSpelling": "phonetic" }
+      ]
+    }`;
 
     const response = await ai.models.generateContent({
         model: modelId,
@@ -129,9 +134,25 @@ export const generateStoryFromWords = async (words: WordData[], level: UserLevel
                 type: Type.OBJECT,
                 properties: {
                     title: { type: Type.STRING },
-                    content: { type: Type.STRING }
+                    genre: { type: Type.STRING },
+                    content: { type: Type.STRING },
+                    vocabulary: { 
+                        type: Type.ARRAY,
+                        items: {
+                             type: Type.OBJECT,
+                             properties: {
+                                term: { type: Type.STRING },
+                                translation: { type: Type.STRING },
+                                definition: { type: Type.STRING },
+                                exampleSentence: { type: Type.STRING },
+                                pronunciation: { type: Type.STRING },
+                                phoneticSpelling: { type: Type.STRING },
+                                type: { type: Type.STRING },
+                             }
+                        }
+                    }
                 },
-                required: ["title", "content"]
+                required: ["title", "genre", "content", "vocabulary"]
             }
         }
     });
@@ -142,10 +163,27 @@ export const generateStoryFromWords = async (words: WordData[], level: UserLevel
     try {
         const cleanText = text.replace(/```json/g, '').replace(/```/g, '');
         const result = JSON.parse(cleanText);
+        
+        // Assign IDs to vocabulary
+        const vocabulary = result.vocabulary.map((w: any) => ({ ...w, id: crypto.randomUUID() }));
+        
+        // Randomize cover gradient
+        const gradients = [
+            'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500',
+            'bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-500',
+            'bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500',
+            'bg-gradient-to-br from-orange-400 via-red-500 to-pink-500',
+            'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900',
+        ];
+        const randomGradient = gradients[Math.floor(Math.random() * gradients.length)];
+
         return {
             title: result.title,
             content: result.content,
-            wordIds: words.map(w => w.id)
+            genre: result.genre,
+            level: level,
+            coverGradient: randomGradient,
+            vocabulary: vocabulary
         };
     } catch (e) {
         console.error("Story Parse Error", e);

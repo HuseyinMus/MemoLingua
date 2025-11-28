@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
@@ -43,6 +42,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                     uid: user.uid,
                     email: user.email || '',
                     username: username,
+                    avatar: '🎓', // Default Avatar
                     level: 'A1', // Default, will be updated in Onboarding
                     goal: 'General English',
                     hasCompletedOnboarding: false,
@@ -54,11 +54,26 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                     lastStudyDate: new Date().toDateString(),
                     xp: 0,
                     streakFreeze: 0,
+                    streak: 0,
+                    longestStreak: 0,
+                    league: 'Bronze',
                     theme: 'system',
                     settings: { autoPlayAudio: true, notifications: true, soundEffects: true }
                 };
 
                 await setDoc(doc(db, "users", user.uid), newProfile);
+                
+                // 3. Initialize Leaderboard Entry (Publicly Readable)
+                try {
+                    await setDoc(doc(db, "leaderboard", user.uid), {
+                        name: username,
+                        xp: 0,
+                        avatar: '🎓',
+                        league: 'Bronze'
+                    });
+                } catch(err) {
+                    console.warn("Leaderboard init failed (likely permissions), skipping.");
+                }
                 
                 onLoginSuccess();
             }
@@ -68,8 +83,14 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             const errorCode = err.code;
 
             if (errorCode === 'auth/invalid-email') msg = "Geçersiz e-posta adresi.";
-            else if (errorCode === 'auth/user-not-found' || errorCode === 'auth/invalid-credential') msg = "E-posta veya şifre hatalı.";
-            else if (errorCode === 'auth/wrong-password') msg = "Şifre yanlış.";
+            else if (
+                errorCode === 'auth/user-not-found' || 
+                errorCode === 'auth/invalid-credential' || 
+                errorCode === 'auth/invalid-login-credentials' || 
+                errorCode === 'auth/wrong-password'
+            ) {
+                msg = "E-posta veya şifre hatalı.";
+            }
             else if (errorCode === 'auth/email-already-in-use') msg = "Bu e-posta adresi zaten kayıtlı.";
             else if (errorCode === 'auth/weak-password') msg = "Şifre en az 6 karakter olmalı.";
             else if (errorCode === 'auth/too-many-requests') msg = "Çok fazla deneme yaptınız. Lütfen biraz bekleyin.";

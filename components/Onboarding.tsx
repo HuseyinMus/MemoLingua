@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Target, GraduationCap, ArrowRight, Flame, Clock } from 'lucide-react';
 import { UserLevel, UserGoal, UserProfile } from '../types';
@@ -39,7 +38,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             xp: 0,
             streakFreeze: 0,
             theme: 'system',
-            settings: { autoPlayAudio: true, notifications: true, soundEffects: true }
+            settings: { autoPlayAudio: true, notifications: true, soundEffects: true },
+            avatar: '🎓',
+            streak: 0,
+            longestStreak: 0,
+            league: 'Bronze'
         });
     };
 

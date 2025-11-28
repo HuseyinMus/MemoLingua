@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, Eye, ArrowRight, Minus, Plus, AlignLeft, FileText, Lightbulb, Keyboard, BookOpen, Waves, AlertCircle, Sparkles, X, Check, Mic, MicOff, RefreshCw, PlayCircle } from 'lucide-react';
+import { Volume2, Eye, ArrowRight, Minus, Plus, AlignLeft, FileText, Lightbulb, Keyboard, BookOpen, Waves, AlertCircle, Sparkles, X, Check, Mic, MicOff, RefreshCw, PlayCircle, Languages } from 'lucide-react';
 import { UserWord, SRSState, StudyMode } from '../types';
 import { playGeminiAudio } from '../services/geminiService';
 
@@ -147,7 +147,7 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
     setPermissionDenied(false);
     setPronunciationScore(0);
     
-    if (mode === 'writing' || mode === 'context') {
+    if (mode === 'writing' || mode === 'context' || mode === 'translation') {
         setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [word.id, mode]); 
@@ -272,6 +272,27 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
     }
   };
 
+  const handleTranslationSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (showAnswer) return;
+
+      const cleanInput = input.trim().toLocaleLowerCase('tr');
+      const cleanTranslation = word.translation.toLocaleLowerCase('tr');
+
+      // Check if the input is contained in the translation (to handle commas, multiple meanings)
+      // or if there's a reasonably high match
+      if (cleanTranslation.includes(cleanInput) && cleanInput.length > 2) {
+          setShowFeedback('correct');
+          speak();
+          setTimeout(() => setShowAnswer(true), 800);
+      } else {
+          setShowFeedback('incorrect');
+          setIsShaking(true);
+          setIncorrectAttempts(prev => prev + 1);
+          setTimeout(() => setIsShaking(false), 500);
+      }
+  };
+
   const handleReveal = () => {
     setShowAnswer(true);
     speak();
@@ -285,6 +306,7 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
   const getPhaseLabel = () => {
       switch(mode) {
           case 'meaning': return { label: 'Step 1: Meaning', color: 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800' };
+          case 'translation': return { label: 'Step 1.5: Translation', color: 'bg-indigo-50 text-indigo-600 border-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800' };
           case 'context': return { label: 'Step 2: Context', color: 'bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800' };
           case 'writing': return { label: 'Step 3: Writing', color: 'bg-orange-50 text-orange-600 border-orange-100 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800' };
           case 'speaking': return { label: 'Step 4: Speaking', color: 'bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800' };
@@ -486,6 +508,31 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
         );
     }
 
+    // TRANSLATION MODE: Show English Term, ask for Turkish translation
+    if (mode === 'translation') {
+        return (
+            <div className="flex flex-col justify-center flex-1 text-center space-y-4 md:space-y-6 animate-fade-in overflow-y-auto">
+                 <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-2 border border-zinc-100 dark:border-zinc-700 shadow-sm shrink-0">
+                    <Languages className="text-zinc-400" size={28} />
+                </div>
+                
+                <div className="space-y-3">
+                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Translate to Turkish</p>
+                    <h2 className="text-4xl md:text-5xl font-black text-black dark:text-white tracking-tight">{word.term}</h2>
+                    
+                    <button
+                        onClick={speak}
+                        type="button"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 text-zinc-500 hover:text-black dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors text-xs font-bold mx-auto border border-zinc-100 dark:border-zinc-700 hover:border-zinc-200 dark:hover:border-zinc-600 active:scale-95"
+                    >
+                        {isPlaying ? <Waves size={14} className="animate-pulse" /> : <Volume2 size={14} />}
+                        <span>Play Audio</span>
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     // WRITING MODE: Show definition, ask for word
     if (mode === 'writing') {
         return (
@@ -621,11 +668,13 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
          );
     }
 
-    // Standard Input Area
-    if (mode === 'writing' || mode === 'context') {
+    // Standard Input Area (Writing, Translation, Context)
+    if (mode === 'writing' || mode === 'context' || mode === 'translation') {
+        const placeholder = mode === 'translation' ? 'Türkçe karşılığı...' : 'Type the word...';
+        
         return (
             <div className={`mt-4 shrink-0 w-full max-w-sm mx-auto ${isShaking ? 'animate-shake' : ''}`}>
-                 {incorrectAttempts >= 3 && (
+                 {incorrectAttempts >= 3 && mode !== 'translation' && (
                      <div className="mb-4 animate-fade-in bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-900/30 rounded-2xl p-4 text-center">
                          <div className="flex items-center justify-center gap-2 mb-1 text-yellow-600 dark:text-yellow-400">
                              <AlertCircle size={16} />
@@ -636,7 +685,7 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
                  )}
                  
                  {/* Progressive Hint Display with Phonetic Spelling */}
-                 {hintLevel > 0 && incorrectAttempts < 3 && (
+                 {hintLevel > 0 && incorrectAttempts < 3 && mode !== 'translation' && (
                     <div className="mb-4 flex flex-col items-center gap-3 animate-slide-up">
                         <div className="text-xs font-bold text-blue-500 uppercase tracking-widest bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm">
                             <span className="text-blue-300">Phonetic</span>
@@ -652,7 +701,7 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
                     </div>
                  )}
 
-                 <form onSubmit={handleWritingSubmit} className="relative mb-3">
+                 <form onSubmit={mode === 'translation' ? handleTranslationSubmit : handleWritingSubmit} className="relative mb-3">
                     <input 
                         ref={inputRef}
                         type="text" 
@@ -666,7 +715,7 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
                                  e.target.scrollIntoView({ behavior: "smooth", block: "center" });
                              }, 300);
                         }}
-                        placeholder="Type the word..."
+                        placeholder={placeholder}
                         autoCorrect="off"
                         autoCapitalize="none"
                         className={`w-full p-4 pr-12 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-center text-lg font-medium outline-none transition-all focus:border-black dark:focus:border-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:bg-white dark:focus:bg-zinc-800 placeholder:text-zinc-300 dark:placeholder:text-zinc-600 text-black dark:text-white
@@ -698,9 +747,11 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
                  </form>
                  <div className="flex flex-col gap-2">
                      <div className="flex gap-2">
-                        <button type="button" onClick={showHint} className="flex-1 py-3 text-xs font-bold text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl transition-colors">
-                            {hintLevel === 0 ? "Need a hint?" : "Reveal next letter"}
-                        </button>
+                        {mode !== 'translation' && (
+                            <button type="button" onClick={showHint} className="flex-1 py-3 text-xs font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-xl transition-colors border border-blue-100 dark:border-blue-900/30 flex items-center justify-center gap-1">
+                                {hintLevel === 0 ? <><Lightbulb size={12}/> Get Hint</> : "Reveal next letter"}
+                            </button>
+                        )}
                         <button 
                             type="button" 
                             onClick={() => {
