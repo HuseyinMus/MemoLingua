@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+
+import React, { useState, useEffect } from 'react';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { Mail, Lock, ArrowRight, Loader2, AlertCircle, User as UserIcon } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Loader2, AlertCircle, User as UserIcon, Check, X, ShieldCheck } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface AuthProps {
@@ -16,34 +17,90 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
     const [username, setUsername] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
+    
+    // Email Verification State
+    const [isVerificationSent, setIsVerificationSent] = useState(false);
+
+    // Password Validation State
+    const [pwdValidations, setPwdValidations] = useState({
+        length: false,
+        number: false,
+        uppercase: false,
+        special: false
+    });
 
     const auth = getAuth();
+
+    // Check Password Strength
+    useEffect(() => {
+        setPwdValidations({
+            length: password.length >= 8,
+            number: /\d/.test(password),
+            uppercase: /[A-Z]/.test(password),
+            special: /[!@#$%^&*(),.?":{}|<>]/.test(password)
+        });
+    }, [password]);
+
+    const isPasswordStrong = Object.values(pwdValidations).every(Boolean);
+
+    const handleForgotPassword = async () => {
+        if (!email) {
+            setError("Şifre sıfırlama bağlantısı için lütfen e-posta adresinizi girin.");
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        setSuccessMsg(null);
+        try {
+            await sendPasswordResetEmail(auth, email);
+            setSuccessMsg("Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.");
+        } catch (err: any) {
+            console.error("Reset Password Error", err);
+            setError("Şifre sıfırlama e-postası gönderilemedi. E-posta adresini kontrol et.");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+        setSuccessMsg(null);
         setLoading(true);
 
         try {
             if (isLogin) {
-                await signInWithEmailAndPassword(auth, email, password);
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                
+                // Optional: Check if email is verified before allowing login
+                // if (!userCredential.user.emailVerified) {
+                //     setError("Lütfen önce e-posta adresinizi doğrulayın.");
+                //     await signOut(auth);
+                //     setLoading(false);
+                //     return;
+                // }
+
                 onLoginSuccess();
             } else {
-                if (!username.trim()) {
-                    throw new Error("Lütfen bir kullanıcı adı girin.");
-                }
+                if (!username.trim()) throw new Error("Lütfen bir kullanıcı adı girin.");
+                if (!isPasswordStrong) throw new Error("Şifreniz yeterince güçlü değil.");
                 
                 // 1. Create Auth User
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const user = userCredential.user;
 
-                // 2. Create Initial User Profile in Firestore
+                // 2. Send Verification Email
+                await sendEmailVerification(user);
+                setIsVerificationSent(true);
+
+                // 3. Create Initial User Profile in Firestore
                 const newProfile: UserProfile = {
                     uid: user.uid,
                     email: user.email || '',
                     username: username,
-                    avatar: '🎓', // Default Avatar
-                    level: 'A1', // Default, will be updated in Onboarding
+                    avatar: '🎓',
+                    level: 'A1',
                     goal: 'General English',
                     hasCompletedOnboarding: false,
                     hasSeenTour: false,
@@ -63,7 +120,6 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
 
                 await setDoc(doc(db, "users", user.uid), newProfile);
                 
-                // 3. Initialize Leaderboard Entry (Publicly Readable)
                 try {
                     await setDoc(doc(db, "leaderboard", user.uid), {
                         name: username,
@@ -71,11 +127,9 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                         avatar: '🎓',
                         league: 'Bronze'
                     });
-                } catch(err) {
-                    console.warn("Leaderboard init failed (likely permissions), skipping.");
-                }
+                } catch(err) { console.warn("Leaderboard init failed", err); }
                 
-                onLoginSuccess();
+                // Don't call onLoginSuccess yet, wait for user to acknowledge verification
             }
         } catch (err: any) {
             console.error("Auth Error", err);
@@ -92,8 +146,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 msg = "E-posta veya şifre hatalı.";
             }
             else if (errorCode === 'auth/email-already-in-use') msg = "Bu e-posta adresi zaten kayıtlı.";
-            else if (errorCode === 'auth/weak-password') msg = "Şifre en az 6 karakter olmalı.";
-            else if (errorCode === 'auth/too-many-requests') msg = "Çok fazla deneme yaptınız. Lütfen biraz bekleyin.";
+            else if (errorCode === 'auth/weak-password') msg = "Şifre çok zayıf.";
             else if (err.message) msg = err.message;
             
             setError(msg);
@@ -101,6 +154,32 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             setLoading(false);
         }
     };
+
+    // Verification Sent Screen
+    if (isVerificationSent) {
+        return (
+             <div className="h-full flex flex-col justify-center p-8 max-w-md mx-auto animate-fade-in text-center">
+                <div className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] shadow-xl border border-zinc-100 dark:border-zinc-800">
+                    <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600 dark:text-green-400">
+                        <Mail size={40} />
+                    </div>
+                    <h2 className="text-2xl font-bold mb-4 text-black dark:text-white">E-Postanı Doğrula</h2>
+                    <p className="text-zinc-500 dark:text-zinc-400 mb-8">
+                        <strong>{email}</strong> adresine bir doğrulama bağlantısı gönderdik. Lütfen kutunu kontrol et ve hesabını aktifleştir.
+                    </p>
+                    <button 
+                        onClick={() => {
+                            setIsVerificationSent(false);
+                            setIsLogin(true); // Switch back to login screen
+                        }}
+                        className="w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-xl font-bold hover:scale-[1.02] active:scale-95 transition-transform"
+                    >
+                        Giriş Ekranına Dön
+                    </button>
+                </div>
+             </div>
+        );
+    }
 
     return (
         <div className="h-full flex flex-col justify-center p-8 max-w-md mx-auto animate-fade-in">
@@ -115,7 +194,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                 </h2>
 
                 {error && (
-                    <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 rounded-xl text-sm font-bold flex flex-col items-start gap-2">
+                    <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 rounded-xl text-sm font-bold flex flex-col items-start gap-2 animate-slide-up">
                         <div className="flex items-center gap-2">
                             <AlertCircle size={16} />
                             <span>{error}</span>
@@ -128,6 +207,13 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                                 Giriş Yapmaya Geç
                             </button>
                         )}
+                    </div>
+                )}
+                
+                {successMsg && (
+                    <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-300 rounded-xl text-sm font-bold flex items-center gap-2 animate-slide-up">
+                        <Check size={16} />
+                        <span>{successMsg}</span>
                     </div>
                 )}
 
@@ -177,12 +263,51 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
                                 required
                             />
                         </div>
+                        {/* Forgot Password Link */}
+                        {isLogin && (
+                            <div className="flex justify-end mt-2 px-1">
+                                <button 
+                                    type="button"
+                                    onClick={handleForgotPassword}
+                                    disabled={loading}
+                                    className="text-xs font-bold text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
+                                >
+                                    Şifremi Unuttum?
+                                </button>
+                            </div>
+                        )}
+                        {/* Password Strength Indicator (Only for Signup) */}
+                        {!isLogin && password.length > 0 && (
+                            <div className="bg-zinc-50 dark:bg-zinc-800/50 p-3 rounded-xl mt-2 space-y-2 animate-slide-up">
+                                <p className="text-xs font-bold text-zinc-500 uppercase">Şifre Gücü</p>
+                                <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
+                                    <div className={`flex items-center gap-1 ${pwdValidations.length ? 'text-green-500' : 'text-zinc-400'}`}>
+                                        {pwdValidations.length ? <Check size={10} /> : <div className="w-2.5 h-2.5 rounded-full border border-zinc-300"></div>}
+                                        En az 8 karakter
+                                    </div>
+                                    <div className={`flex items-center gap-1 ${pwdValidations.uppercase ? 'text-green-500' : 'text-zinc-400'}`}>
+                                        {pwdValidations.uppercase ? <Check size={10} /> : <div className="w-2.5 h-2.5 rounded-full border border-zinc-300"></div>}
+                                        1 Büyük Harf
+                                    </div>
+                                    <div className={`flex items-center gap-1 ${pwdValidations.number ? 'text-green-500' : 'text-zinc-400'}`}>
+                                        {pwdValidations.number ? <Check size={10} /> : <div className="w-2.5 h-2.5 rounded-full border border-zinc-300"></div>}
+                                        1 Rakam
+                                    </div>
+                                    <div className={`flex items-center gap-1 ${pwdValidations.special ? 'text-green-500' : 'text-zinc-400'}`}>
+                                        {pwdValidations.special ? <Check size={10} /> : <div className="w-2.5 h-2.5 rounded-full border border-zinc-300"></div>}
+                                        1 Özel Karakter
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <button 
                         type="submit" 
-                        disabled={loading}
-                        className="w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-xl font-bold text-lg hover:scale-[1.02] active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 mt-4"
+                        disabled={loading || (!isLogin && !isPasswordStrong)}
+                        className={`w-full py-4 rounded-xl font-bold text-lg hover:scale-[1.02] active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 mt-4 
+                            ${(!isLogin && !isPasswordStrong) ? 'bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-black dark:bg-white text-white dark:text-black'}
+                        `}
                     >
                         {loading ? <Loader2 className="animate-spin" /> : (
                             <>
@@ -194,7 +319,7 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
 
                 <div className="mt-6 text-center">
                     <button 
-                        onClick={() => { setIsLogin(!isLogin); setError(null); }}
+                        onClick={() => { setIsLogin(!isLogin); setError(null); setSuccessMsg(null); setPassword(''); }}
                         className="text-sm font-medium text-zinc-500 hover:text-black dark:hover:text-white transition-colors"
                     >
                         {isLogin ? "Hesabın yok mu? Kayıt Ol" : "Zaten hesabın var mı? Giriş Yap"}

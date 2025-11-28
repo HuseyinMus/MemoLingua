@@ -14,6 +14,7 @@ import { Arcade } from './components/Arcade';
 import { Settings } from './components/Settings';
 import { Auth } from './components/Auth';
 import { Tour, TourStep } from './components/Tour';
+import { AdBanner } from './components/AdBanner'; // Import AdBanner
 
 import { Sparkles, Zap, Layers, Volume2, AlignLeft, FileText, Settings as SettingsIcon, ArrowLeft, Trophy, Target, LogOut, CheckCircle2, RotateCcw, ChevronDown, Check, Loader2, Search, ArrowRight, Flame, BrainCircuit, User, Play, Calendar, MoreHorizontal, PenTool, Mic, BookOpen, Moon, Sun, Bell, VolumeX, Shield, PieChart, Award, Trash2, Crown, Lock, Library, Edit2, X, ShoppingBag, Snowflake, Quote, TrendingUp, Grid, Clock, Book, PlusCircle } from 'lucide-react';
 
@@ -934,6 +935,9 @@ export default function App() {
                  </div>
              </div>
             
+            {/* AD BANNER: Dashboard Middle */}
+            <AdBanner adSlot="dashboard-mid" />
+
             {/* Quick Actions */}
             <div className="grid grid-cols-2 gap-3">
                 <button 
@@ -1273,6 +1277,9 @@ export default function App() {
                        <p className="text-3xl font-black text-black dark:text-white">{sessionResults.length}</p>
                    </div>
               </div>
+              
+              {/* AD BANNER: Session End */}
+              <AdBanner adSlot="session-end" />
 
               {/* Reviewed Words List */}
               <div className="bg-zinc-50 dark:bg-zinc-900/50 rounded-[2rem] p-6 mb-8">
@@ -1520,7 +1527,12 @@ export default function App() {
                 onSignOut={handleSignOut}
             />
         )}
-        {view === AppView.ARENA && <Arcade userProfile={userProfile} words={words} onAddXP={handleAddXP} leaderboardData={leaderboardData} />}
+        {view === AppView.ARENA && (
+            <>
+                <AdBanner adSlot="arena-top" className="mb-0" />
+                <Arcade userProfile={userProfile} words={words} onAddXP={handleAddXP} leaderboardData={leaderboardData} />
+            </>
+        )}
       </main>
       
       {showLibrary && renderLibrary()}
