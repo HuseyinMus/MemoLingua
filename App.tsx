@@ -9,7 +9,7 @@ import { doc, getDoc, setDoc, collection, onSnapshot, writeBatch, query, orderBy
 import { Navigation } from './components/Navigation';
 import { StudyCard } from './components/StudyCard';
 import { Onboarding } from './components/Onboarding';
-import { Games } from './components/Games'; // Correct relative import
+import { Games } from './components/Games';
 import { Settings } from './components/Settings';
 import { Auth } from './components/Auth';
 import { Tour } from './components/Tour';

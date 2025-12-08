@@ -32,7 +32,7 @@ export enum AppView {
   DISCOVER = 'DISCOVER',
   STUDIO = 'STUDIO',
   PROFILE = 'PROFILE',
-  GAMES = 'GAMES', // Renamed from ARENA
+  GAMES = 'GAMES',
   SETTINGS = 'SETTINGS',
 }
 
@@ -80,7 +80,7 @@ export interface Achievement {
   unlocked: boolean;
   progress: number;
   maxProgress: number;
-  type?: 'streak' | 'xp' | 'count'; // Added optional type for better handling
+  type?: 'streak' | 'xp' | 'count';
 }
 
 export interface GeneratedStory {

@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { Trophy, Gamepad2, X, Ghost, BrainCircuit, Grid, ArrowLeft } from 'lucide-react';
+import { Trophy, Gamepad2, X, Ghost, BrainCircuit, Grid, ArrowLeft, RotateCcw } from 'lucide-react';
 import { LeaderboardEntry, UserProfile, UserWord } from '../types';
 
 interface GamesProps {
@@ -206,8 +205,11 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
 
                 <div className="relative bg-zinc-200 dark:bg-zinc-800 rounded-xl border-4 border-zinc-300 dark:border-zinc-700 w-[300px] h-[300px] shadow-inner">
                     {isPaused && (
-                         <div className="absolute inset-0 bg-black/50 z-10 flex items-center justify-center text-white font-bold text-2xl">
-                             Game Over
+                         <div className="absolute inset-0 bg-black/50 z-10 flex items-center justify-center text-white font-bold text-2xl flex-col">
+                             <span>Game Over</span>
+                             <button onClick={() => setActiveGame('none')} className="mt-4 px-4 py-2 bg-white text-black text-sm rounded-lg font-bold flex items-center gap-2">
+                                <RotateCcw size={16} /> Çıkış
+                             </button>
                          </div>
                     )}
                     {snake.map((seg, i) => (
