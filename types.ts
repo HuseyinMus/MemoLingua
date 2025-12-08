@@ -9,6 +9,7 @@ export interface WordData {
   phoneticSpelling: string; // Simple pronunciation guide
   type: string; // noun, verb, etc.
   audioBase64?: string; // AI Generated PCM Audio
+  mnemonic?: string; // Memory aid hook
 }
 
 export interface SRSState {
@@ -28,8 +29,8 @@ export enum AppView {
   ONBOARDING = 'ONBOARDING',
   DASHBOARD = 'DASHBOARD',
   STUDY = 'STUDY',
-  DISCOVER = 'DISCOVER', // Restore DISCOVER for Word Generation
-  STORIES = 'STORIES',
+  DISCOVER = 'DISCOVER',
+  STUDIO = 'STUDIO', // Renamed from STORIES to STUDIO
   PROFILE = 'PROFILE',
   ARENA = 'ARENA',
   SETTINGS = 'SETTINGS',
@@ -91,6 +92,25 @@ export interface GeneratedStory {
   coverGradient: string; // CSS class for gradient
   date: number;
   vocabulary: WordData[]; // Pre-generated vocabulary from the story
+}
+
+// Roleplay / Chat Types
+export interface ChatScenario {
+    id: string;
+    title: string;
+    description: string;
+    icon: string; // Emoji
+    initialMessage: string;
+    difficulty: 'Easy' | 'Medium' | 'Hard';
+    gradient: string;
+}
+
+export interface ChatMessage {
+    id: string;
+    sender: 'user' | 'ai';
+    text: string;
+    correction?: string; // Optional grammar correction for user messages
+    timestamp: number;
 }
 
 // Gamification Types

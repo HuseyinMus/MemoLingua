@@ -1,8 +1,8 @@
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { WordData, UserLevel, UserGoal, GeneratedStory } from "../types";
+import { WordData, UserLevel, UserGoal, GeneratedStory, ChatMessage } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: "AIzaSyBVb5P2YZB_NStNvMMmDDU2Rzbg67H0_G4" });
 
 const modelId = "gemini-2.5-flash";
 const ttsModelId = "gemini-2.5-flash-preview-tts";
@@ -52,6 +52,76 @@ export const generateSingleWord = async (term: string, level: UserLevel): Promis
     } catch (e) {
         console.error("JSON Parse Error", e);
         throw new Error("Failed to parse AI response");
+    }
+};
+
+export const generateMnemonic = async (term: string, definition: string, translation: string): Promise<string> => {
+    const prompt = `Create a short, memorable, and creative mnemonic aid (memory hook) for the English word "${term}" (Turkish: ${translation}).
+    Definition: ${definition}.
+    
+    The mnemonic can be:
+    1. A rhyme.
+    2. A visual association.
+    3. A funny connection between the English sound and Turkish meaning.
+    
+    Keep it under 25 words. Return ONLY the string.`;
+
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: prompt,
+    });
+    
+    return response.text?.trim() || "No hint available.";
+};
+
+export const generateRoleplayResponse = async (
+    scenarioTitle: string,
+    history: ChatMessage[],
+    userLevel: string
+): Promise<{ text: string; correction?: string }> => {
+    
+    const chatHistory = history.map(h => `${h.sender === 'user' ? 'Student' : 'You'}: ${h.text}`).join('\n');
+    const lastUserMessage = history[history.length - 1]?.text || "";
+
+    const prompt = `You are a roleplay partner in a '${scenarioTitle}' scenario. The user is an English student (Level ${userLevel}).
+    
+    Chat History:
+    ${chatHistory}
+    
+    Task:
+    1. Respond naturally to the student's last message ("${lastUserMessage}") to keep the conversation going. Keep it concise (max 2 sentences).
+    2. Analyze the student's last message for grammar or naturalness errors.
+    
+    Return JSON:
+    {
+      "response": "Your response here",
+      "correction": "Optional correction if they made a mistake (e.g., 'Better way to say it: ...'). If perfect, return null."
+    }`;
+
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    response: { type: Type.STRING },
+                    correction: { type: Type.STRING, nullable: true },
+                },
+                required: ["response"]
+            }
+        }
+    });
+
+    try {
+        const cleanText = response.text?.replace(/```json/g, '').replace(/```/g, '');
+        if (!cleanText) throw new Error("Empty response");
+        const data = JSON.parse(cleanText);
+        return { text: data.response, correction: data.correction };
+    } catch (e) {
+        console.error("Roleplay Error", e);
+        return { text: "I didn't catch that. Could you say it again?" };
     }
 };
 
@@ -219,6 +289,11 @@ let audioContext: AudioContext | null = null;
 
 export const playGeminiAudio = async (base64String: string): Promise<void> => {
     if (!base64String) throw new Error("No audio data provided");
+
+    // Check environment support
+    if (typeof window === 'undefined' || (!window.AudioContext && !(window as any).webkitAudioContext)) {
+        throw new Error("Web Audio API not supported");
+    }
 
     try {
         if (!audioContext) {

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Home, Sparkles, BookOpen, Trophy, Book, Search } from 'lucide-react';
+import { Home, Sparkles, BookOpen, Trophy, Book, Search, MessageSquareText } from 'lucide-react';
 import { AppView } from '../types';
 
 interface NavigationProps {
@@ -12,8 +12,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) 
   const navItems = [
     { view: AppView.DASHBOARD, icon: Home, label: 'Home', id: 'nav-dashboard' },
     { view: AppView.STUDY, icon: BookOpen, label: 'Review', id: 'nav-review' },
-    { view: AppView.DISCOVER, icon: Search, label: 'Kelime', id: 'nav-discover' }, // Word Generation
-    { view: AppView.STORIES, icon: Book, label: 'Stories', id: 'nav-stories' }, // Story Library
+    { view: AppView.DISCOVER, icon: Search, label: 'Kelime', id: 'nav-discover' },
+    { view: AppView.STUDIO, icon: MessageSquareText, label: 'Studio', id: 'nav-studio' }, // Updated to STUDIO
     { view: AppView.ARENA, icon: Trophy, label: 'Arena', id: 'nav-arena' },
   ];
 

@@ -37,20 +37,42 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   const handleExportData = () => {
-      const data = {
-          profile: userProfile,
-          words: words,
-          exportDate: new Date().toISOString(),
-          appVersion: '1.1.0'
-      };
-      
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
-      const downloadAnchorNode = document.createElement('a');
-      downloadAnchorNode.setAttribute("href", dataStr);
-      downloadAnchorNode.setAttribute("download", `memolingua_backup_${new Date().toISOString().split('T')[0]}.json`);
-      document.body.appendChild(downloadAnchorNode);
-      downloadAnchorNode.click();
-      downloadAnchorNode.remove();
+      try {
+          // Safe JSON Stringify logic for export
+          const safeStringify = (obj: any) => {
+              const cache = new Set();
+              return JSON.stringify(obj, (key, value) => {
+                  if (typeof value === 'object' && value !== null) {
+                      if (cache.has(value)) {
+                          return; // Circular ref found
+                      }
+                      cache.add(value);
+                  }
+                  return value;
+              }, 2);
+          };
+
+          const safeProfile = userProfile ? JSON.parse(safeStringify(userProfile)) : null;
+          const safeWords = words ? JSON.parse(safeStringify(words)) : [];
+          
+          const data = {
+              profile: safeProfile,
+              words: safeWords,
+              exportDate: new Date().toISOString(),
+              appVersion: '1.1.0'
+          };
+          
+          const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+          const downloadAnchorNode = document.createElement('a');
+          downloadAnchorNode.setAttribute("href", dataStr);
+          downloadAnchorNode.setAttribute("download", `memolingua_backup_${new Date().toISOString().split('T')[0]}.json`);
+          document.body.appendChild(downloadAnchorNode);
+          downloadAnchorNode.click();
+          downloadAnchorNode.remove();
+      } catch (error) {
+          console.error("Export failed:", error);
+          alert("Veri dışa aktarılırken bir hata oluştu.");
+      }
   };
 
   return (
