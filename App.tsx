@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { UserWord, AppView, SRSState, UserProfile, StudyMode, UserLevel, UserGoal, GeneratedStory, Achievement, LeaderboardEntry, WordData, ChatMessage, ChatScenario } from './types';
 import { generateDailyBatch, generateAudio, playGeminiAudio, generateContextualStory, generateSingleWord, generateRoleplayResponse } from './services/geminiService';
@@ -711,6 +710,7 @@ export default function App() {
         const updatedStories = [newStory, ...stories];
         setStories(updatedStories);
         setActiveStory(newStory);
+        setCurrentStoryPage(0); // Reset page to 0 when creating new story
     } catch (e) {
         console.error(e);
         alert("Hikaye oluşturulamadı. Lütfen tekrar dene.");
@@ -1106,7 +1106,10 @@ export default function App() {
                           {stories.map(story => (
                               <button 
                                   key={story.id}
-                                  onClick={() => setActiveStory(story)}
+                                  onClick={() => {
+                                      setActiveStory(story);
+                                      setCurrentStoryPage(0);
+                                  }}
                                   className={`w-full text-left p-6 rounded-[2.5rem] relative overflow-hidden group hover:scale-[1.02] active:scale-95 transition-all shadow-lg ${story.coverGradient}`}
                               >
                                   <div className="relative z-10 text-white">

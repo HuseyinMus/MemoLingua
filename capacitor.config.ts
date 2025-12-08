@@ -1,10 +1,9 @@
-
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.memolingua.app',
   appName: 'MemoLingua',
-  webDir: 'dist', // Vite/React build output directory
+  webDir: 'dist',
   server: {
     androidScheme: 'https'
   },
@@ -16,7 +15,7 @@ const config: CapacitorConfig = {
     },
     SplashScreen: {
       launchShowDuration: 2000,
-      backgroundColor: "#09090b", // Zinc 950
+      backgroundColor: "#09090b",
       showSpinner: true,
       spinnerColor: "#ffffff",
     },

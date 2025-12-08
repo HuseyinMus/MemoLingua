@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. KULLANICI PROFİLLERİ
+    // Kullanıcı sadece kendi profilini okuyabilir ve yazabilir.
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // 2. KULLANICI KELİMELERİ (Alt Koleksiyon)
+      // Kullanıcı sadece kendi kelimelerine erişebilir.
+      match /words/{wordId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // 3. LİDERLİK TABLOSU (Arena)
+    // Okuma: Herkes görebilir (Sıralama için).
+    // Yazma: Kullanıcı sadece kendi skorunu güncelleyebilir.
+    match /leaderboard/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
