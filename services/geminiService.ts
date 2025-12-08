@@ -11,16 +11,28 @@ const getApiKey = (): string => {
     if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
         return (window as any).process.env.API_KEY;
     }
-    console.error("Gemini API Key is missing!");
+    console.warn("Gemini API Key is missing! AI features will not work.");
     return "";
 };
 
-const ai = new GoogleGenAI({ apiKey: getApiKey() });
+// Lazy initialization to prevent app crash if key is missing on load
+let aiInstance: GoogleGenAI | null = null;
+const getAi = () => {
+    if (!aiInstance) {
+        const apiKey = getApiKey();
+        if (!apiKey) {
+            throw new Error("API Key is missing. Please check your configuration.");
+        }
+        aiInstance = new GoogleGenAI({ apiKey });
+    }
+    return aiInstance;
+};
 
 const modelId = "gemini-2.5-flash";
 const ttsModelId = "gemini-2.5-flash-preview-tts";
 
 export const generateSingleWord = async (term: string, level: UserLevel): Promise<WordData> => {
+    const ai = getAi();
     const prompt = `Generate a detailed vocabulary card for the English word "${term}" suitable for a student at '${level}' level.
     
     Provide:
@@ -69,6 +81,7 @@ export const generateSingleWord = async (term: string, level: UserLevel): Promis
 };
 
 export const generateMnemonic = async (term: string, definition: string, translation: string): Promise<string> => {
+    const ai = getAi();
     const prompt = `Create a short, memorable, and creative mnemonic aid (memory hook) for the English word "${term}" (Turkish: ${translation}).
     Definition: ${definition}.
     
@@ -92,7 +105,7 @@ export const generateRoleplayResponse = async (
     history: ChatMessage[],
     userLevel: string
 ): Promise<{ text: string; correction?: string }> => {
-    
+    const ai = getAi();
     const chatHistory = history.map(h => `${h.sender === 'user' ? 'Student' : 'You'}: ${h.text}`).join('\n');
     const lastUserMessage = history[history.length - 1]?.text || "";
 
@@ -139,6 +152,7 @@ export const generateRoleplayResponse = async (
 };
 
 export const generateDailyBatch = async (count: number, level: UserLevel, goal: UserGoal, existingWords: string[]): Promise<WordData[]> => {
+    const ai = getAi();
     const prompt = `Generate exactly ${count} unique English vocabulary words for a student at '${level}' level who is interested in '${goal}'.
     
     Do NOT include these words: ${existingWords.slice(0, 50).join(', ')}.
@@ -193,6 +207,7 @@ export const generateDailyBatch = async (count: number, level: UserLevel, goal: 
 
 // New Robust Story Generation
 export const generateContextualStory = async (level: UserLevel, goal: UserGoal): Promise<Omit<GeneratedStory, 'id' | 'date'>> => {
+    const ai = getAi();
     const prompt = `Write a short, engaging story (approx 150 words) suitable for an English learner at ${level} level. 
     The story theme should be related to: ${goal} (or general interesting fiction).
     
@@ -276,6 +291,7 @@ export const generateContextualStory = async (level: UserLevel, goal: UserGoal):
 
 export const generateAudio = async (text: string): Promise<string | undefined> => {
   try {
+    const ai = getAi();
     const response = await ai.models.generateContent({
       model: ttsModelId,
       contents: {

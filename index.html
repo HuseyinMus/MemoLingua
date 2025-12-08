@@ -15,7 +15,9 @@
       window.process = {
         env: {
           NODE_ENV: 'development',
-          API_KEY: 'AIzaSyBVb5P2YZB_NStNvMMmDDU2Rzbg67H0_G4',
+          // Attempt to use the injected variable if available, otherwise default to empty.
+          // NOTE: Do not hardcode API keys here in production.
+          API_KEY: (() => { try { return process.env.API_KEY } catch(e) { return '' } })(),
           FIREBASE_API_KEY: 'AIzaSyCbHFt-2mkzs24ASj_pDpw8Euo6JJeKCBk',
           FIREBASE_AUTH_DOMAIN: 'fitback-184bd.firebaseapp.com',
           FIREBASE_PROJECT_ID: 'fitback-184bd',
