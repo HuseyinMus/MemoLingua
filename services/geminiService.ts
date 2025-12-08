@@ -1,7 +1,21 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { WordData, UserLevel, UserGoal, GeneratedStory, ChatMessage } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Robustly get API Key from process.env or window polyfill
+const getApiKey = (): string => {
+    // Check standard process.env
+    if (typeof process !== 'undefined' && process.env?.API_KEY) {
+        return process.env.API_KEY;
+    }
+    // Check window.process polyfill (common in this app structure)
+    if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
+        return (window as any).process.env.API_KEY;
+    }
+    console.error("Gemini API Key is missing!");
+    return "";
+};
+
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 const modelId = "gemini-2.5-flash";
 const ttsModelId = "gemini-2.5-flash-preview-tts";
