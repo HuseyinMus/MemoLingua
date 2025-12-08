@@ -1,8 +1,7 @@
-
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { WordData, UserLevel, UserGoal, GeneratedStory, ChatMessage } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: "AIzaSyBVb5P2YZB_NStNvMMmDDU2Rzbg67H0_G4" });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const modelId = "gemini-2.5-flash";
 const ttsModelId = "gemini-2.5-flash-preview-tts";

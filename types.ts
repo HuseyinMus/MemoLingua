@@ -30,9 +30,9 @@ export enum AppView {
   DASHBOARD = 'DASHBOARD',
   STUDY = 'STUDY',
   DISCOVER = 'DISCOVER',
-  STUDIO = 'STUDIO', // Renamed from STORIES to STUDIO
+  STUDIO = 'STUDIO',
   PROFILE = 'PROFILE',
-  ARENA = 'ARENA',
+  GAMES = 'GAMES', // Renamed from ARENA
   SETTINGS = 'SETTINGS',
 }
 

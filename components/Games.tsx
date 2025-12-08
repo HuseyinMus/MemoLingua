@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Trophy, Gamepad2, Timer, Flame, X, Play, Heart, RefreshCw, Grid, Ghost, BrainCircuit, CheckCircle2, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Trophy, Gamepad2, X, Ghost, BrainCircuit, Grid, ArrowLeft } from 'lucide-react';
 import { LeaderboardEntry, UserProfile, UserWord } from '../types';
 
-interface ArcadeProps {
+interface GamesProps {
     userProfile: UserProfile | null;
     words: UserWord[];
     onAddXP: (amount: number) => void;
@@ -20,6 +20,7 @@ const useHangman = (words: UserWord[], onEnd: (score: number) => void) => {
     const [status, setStatus] = useState<'playing' | 'won' | 'lost'>('playing');
 
     const init = useCallback(() => {
+        if (words.length === 0) return;
         const random = words[Math.floor(Math.random() * words.length)];
         setWord(random);
         setGuessed(new Set());
@@ -58,20 +59,14 @@ const useHangman = (words: UserWord[], onEnd: (score: number) => void) => {
     return { word, guessed, lives, status, guess, init };
 };
 
-// 2. SNAKE LOGIC (Vocabulary Edition)
+// 2. SNAKE LOGIC
 const GRID_SIZE = 20;
-const useSnake = (words: UserWord[], onEnd: (score: number) => void) => {
+const useSnake = (onEnd: (score: number) => void) => {
     const [snake, setSnake] = useState<{x:number, y:number}[]>([{x: 10, y: 10}]);
     const [dir, setDir] = useState<{x:number, y:number}>({x: 1, y: 0});
-    const [food, setFood] = useState<{x:number, y:number, word?: UserWord}>({x: 15, y: 10});
+    const [food, setFood] = useState<{x:number, y:number}>({x: 15, y: 10});
     const [score, setScore] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
-    const [targetWord, setTargetWord] = useState<UserWord | null>(null);
-    const [options, setOptions] = useState<UserWord[]>([]); // Options displayed on grid
-    
-    // ... Simplified for stability: Classic Snake capturing points
-    // To make it vocab related: Snake eats "Correct Translation" blocks?
-    // For now, let's implement classic snake that awards XP to keep it robust within text limits.
     
     const moveSnake = useCallback(() => {
         if (isPaused) return;
@@ -120,18 +115,18 @@ const useSnake = (words: UserWord[], onEnd: (score: number) => void) => {
     return { snake, food, score, setDir, isPaused, setIsPaused, dir };
 };
 
-export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP, leaderboardData }) => {
+export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leaderboardData }) => {
     const [activeTab, setActiveTab] = useState<'menu' | 'leaderboard'>('menu');
-    const [activeGame, setActiveGame] = useState<'none' | 'hangman' | 'snake' | 'match'>('none');
+    const [activeGame, setActiveGame] = useState<'none' | 'hangman' | 'snake'>('none');
     
     // --- HANGMAN RENDER ---
     const HangmanGame = () => {
-        const { word, guessed, lives, status, guess, init } = useHangman(words.length > 0 ? words : [{term:'Welcome', translation:'Hoşgeldin'} as any], (points) => onAddXP(points));
+        const gameWords = words.length > 0 ? words : [{term:'Welcome', translation:'Hoşgeldin'} as any];
+        const { word, guessed, lives, status, guess, init } = useHangman(gameWords, (points) => onAddXP(points));
         
         return (
             <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in">
                 <div className="mb-8 relative">
-                    {/* SVG Drawing of Hangman based on lives */}
                     <svg width="120" height="160" viewBox="0 0 120 160" className="stroke-black dark:stroke-white stroke-2 fill-none">
                         <line x1="10" y1="150" x2="110" y2="150" />
                         <line x1="60" y1="150" x2="60" y2="20" />
@@ -193,14 +188,13 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP, lea
 
     // --- SNAKE RENDER ---
     const SnakeGame = () => {
-        const { snake, food, score, setDir, isPaused, setIsPaused, dir } = useSnake(words, (s) => onAddXP(Math.floor(s/2)));
+        const { snake, food, score, setDir, isPaused } = useSnake((s) => onAddXP(Math.floor(s/2)));
         
-        // Touch controls
         const handleTouch = (d: string) => {
-            if (d === 'UP' && dir.y !== 1) setDir({x: 0, y: -1});
-            if (d === 'DOWN' && dir.y !== -1) setDir({x: 0, y: 1});
-            if (d === 'LEFT' && dir.x !== 1) setDir({x: -1, y: 0});
-            if (d === 'RIGHT' && dir.x !== -1) setDir({x: 1, y: 0});
+            if (d === 'UP') setDir(prev => prev.y !== 1 ? {x: 0, y: -1} : prev);
+            if (d === 'DOWN') setDir(prev => prev.y !== -1 ? {x: 0, y: 1} : prev);
+            if (d === 'LEFT') setDir(prev => prev.x !== 1 ? {x: -1, y: 0} : prev);
+            if (d === 'RIGHT') setDir(prev => prev.x !== -1 ? {x: 1, y: 0} : prev);
         };
 
         return (
@@ -229,7 +223,6 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP, lea
                     />
                 </div>
 
-                {/* D-Pad for Mobile */}
                 <div className="grid grid-cols-3 gap-2 mt-8">
                     <div></div>
                     <button onClick={() => handleTouch('UP')} className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center active:bg-zinc-300 text-black dark:text-white text-2xl font-bold">↑</button>
@@ -255,7 +248,7 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP, lea
                 </header>
                 
                 <div className="space-y-3">
-                     {leaderboardData?.map((entry, i) => (
+                     {leaderboardData?.map((entry) => (
                          <div key={entry.id} className={`flex items-center gap-4 p-4 rounded-2xl border ${entry.isCurrentUser ? 'bg-black text-white dark:bg-white dark:text-black border-transparent' : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 text-black dark:text-white'}`}>
                              <div className="font-bold font-mono text-lg w-8 text-center">{entry.rank}</div>
                              <div className="text-2xl">{entry.avatar}</div>
@@ -325,13 +318,7 @@ export const Arcade: React.FC<ArcadeProps> = ({ userProfile, words, onAddXP, lea
                         <p className="text-green-100 text-sm font-medium">Klasik yılan oyunu ile reflekslerini test et.</p>
                     </div>
                 </button>
-                
-                <div className="p-6 rounded-[2.5rem] bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-center opacity-60">
-                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-2">Çok Yakında</p>
-                    <h3 className="text-lg font-bold text-black dark:text-white">Kelime Eşleştirme</h3>
-                </div>
             </div>
         </div>
     );
 };
-    

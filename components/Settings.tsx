@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ArrowLeft, Sun, Moon, Settings as SettingsIcon, Volume2, Bell, Trash2, LogOut, Download, FileJson, X, Edit2 } from 'lucide-react';
 import { UserProfile, AppTheme, UserWord } from '../types';
@@ -38,22 +37,25 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const handleExportData = () => {
       try {
-          // Safe JSON Stringify logic for export
-          const safeStringify = (obj: any) => {
-              const cache = new Set();
-              return JSON.stringify(obj, (key, value) => {
-                  if (typeof value === 'object' && value !== null) {
-                      if (cache.has(value)) {
-                          return; // Circular ref found
-                      }
-                      cache.add(value);
-                  }
-                  return value;
-              }, 2);
+          // Robust sanitizer specifically for export to remove any circular deps or Firestore artifacts
+          const deepSanitize = (obj: any, seen = new WeakSet()): any => {
+                if (obj === null || typeof obj !== 'object') return obj;
+                if (seen.has(obj)) return null;
+                seen.add(obj);
+                if (Array.isArray(obj)) return obj.map(i => deepSanitize(i, seen));
+                const res: any = {};
+                for (const key in obj) {
+                    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                         // Filter out internal properties common in Firebase objects
+                         if (key.startsWith('_') || key === 'delegate') continue;
+                         res[key] = deepSanitize(obj[key], seen);
+                    }
+                }
+                return res;
           };
 
-          const safeProfile = userProfile ? JSON.parse(safeStringify(userProfile)) : null;
-          const safeWords = words ? JSON.parse(safeStringify(words)) : [];
+          const safeProfile = userProfile ? deepSanitize(userProfile) : null;
+          const safeWords = words ? deepSanitize(words) : [];
           
           const data = {
               profile: safeProfile,

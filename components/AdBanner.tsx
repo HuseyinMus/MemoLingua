@@ -2,20 +2,14 @@
 import React, { useEffect, useRef } from 'react';
 
 interface AdBannerProps {
-  adSlot?: string; // Google AdSense slot ID (AdSense panelinden aldığın Slot ID)
+  adSlot?: string;
   format?: 'auto' | 'fluid' | 'rectangle';
   className?: string;
 }
 
-// REKLAM KONFİGÜRASYONU
-// Burayı AdSense panelinden aldığın bilgilerle doldurmalısın.
 const AD_CONFIG = {
-    // BURAYI DEĞİŞTİR: Kendi Yayıncı Kimliğin (Publisher ID)
-    // Örnek: ca-pub-1234567890123456
-    client: "ca-pub-XXXXXXXXXXXXXXXX", 
-    
-    // Uygulamanı yayına aldıktan ve AdSense onayı aldıktan sonra bunu 'false' yap.
-    isTestMode: true 
+    client: process.env.ADSENSE_CLIENT_ID || "", 
+    isTestMode: process.env.NODE_ENV === 'development'
 };
 
 export const AdBanner: React.FC<AdBannerProps> = ({ adSlot, format = 'auto', className = '' }) => {
@@ -23,13 +17,10 @@ export const AdBanner: React.FC<AdBannerProps> = ({ adSlot, format = 'auto', cla
     const hasLoaded = useRef(false);
 
     useEffect(() => {
-        // Eğer Test modundaysak veya script yüklenmediyse çalıştırma
-        if (AD_CONFIG.isTestMode) return;
+        if (AD_CONFIG.isTestMode || !AD_CONFIG.client) return;
 
         try {
-            // Reklam zaten yüklendiyse tekrar yükleme (Strict Mode koruması)
             if (hasLoaded.current) return;
-
             // @ts-ignore
             if (window.adsbygoogle) {
                 // @ts-ignore
@@ -44,21 +35,21 @@ export const AdBanner: React.FC<AdBannerProps> = ({ adSlot, format = 'auto', cla
     if (AD_CONFIG.isTestMode) {
         return (
             <div className={`w-full bg-zinc-100 dark:bg-zinc-800 border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl p-4 flex flex-col items-center justify-center text-zinc-400 my-4 select-none ${className}`}>
-                <span className="text-xs font-bold uppercase tracking-widest mb-1">Reklam Alanı (Test Modu)</span>
-                <span className="text-[10px] opacity-70">Client: {AD_CONFIG.client}</span>
-                <span className="text-[10px] opacity-70">Slot: {adSlot || 'Tanımlanmadı'}</span>
+                <span className="text-xs font-bold uppercase tracking-widest mb-1">Reklam Alanı (Test)</span>
                 <p className="text-[10px] mt-2 text-center text-zinc-500 max-w-xs">
-                    Gerçek reklamları görmek için siteyi yayına al ve <code>AdBanner.tsx</code> içindeki <code>isTestMode</code> değerini <code>false</code> yap.
+                   Environment variables ayarlanmadı.
                 </p>
             </div>
         );
     }
 
+    if (!AD_CONFIG.client) return null;
+
     return (
-        <div className={`w-full my-4 overflow-hidden flex justify-center bg-transparent ${className}`}>
+        <div className={`w-full my-4 overflow-hidden flex justify-center bg-transparent min-h-0 ${className}`}>
             <ins className="adsbygoogle"
                 ref={adRef}
-                style={{ display: 'block', width: '100%' }}
+                style={{ display: 'block', width: '100%', background: 'transparent' }}
                 data-ad-client={AD_CONFIG.client}
                 data-ad-slot={adSlot}
                 data-ad-format={format}
