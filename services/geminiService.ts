@@ -3,14 +3,19 @@ import { WordData, UserLevel, UserGoal, GeneratedStory, ChatMessage } from "../t
 
 // Robustly get API Key from process.env or window polyfill
 const getApiKey = (): string => {
-    // Check standard process.env
-    if (typeof process !== 'undefined' && process.env?.API_KEY) {
-        return process.env.API_KEY;
-    }
-    // Check window.process polyfill (common in this app structure)
+    // 1. Try standard process.env (build-time replacement)
+    try {
+        if (typeof process !== 'undefined' && process.env?.API_KEY) {
+            return process.env.API_KEY;
+        }
+    } catch(e) {}
+
+    // 2. Try window.process polyfill (runtime polyfill)
     if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
         return (window as any).process.env.API_KEY;
     }
+    
+    // Warn but don't crash yet
     console.warn("Gemini API Key is missing! AI features will not work.");
     return "";
 };
@@ -20,6 +25,8 @@ let aiInstance: GoogleGenAI | null = null;
 const getAi = () => {
     if (!aiInstance) {
         const apiKey = getApiKey();
+        // The SDK constructor throws if apiKey is empty string or undefined.
+        // We explicitly throw a helpful error here to catch it in UI.
         if (!apiKey) {
             throw new Error("API Key is missing. Please check your configuration.");
         }
