@@ -2,23 +2,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 1. KULLANICI PROFİLLERİ
-    // Kullanıcı sadece kendi profilini okuyabilir ve yazabilir.
+    // 1. KULLANICI PROFİLLERİ (ÖZEL)
+    // Herkes sadece kendi profilini okuyabilir ve yazabilir.
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
 
-      // 2. KULLANICI KELİMELERİ (Alt Koleksiyon)
-      // Kullanıcı sadece kendi kelimelerine erişebilir.
+      // 2. KULLANICI KELİMELERİ (ÖZEL)
+      // Kullanıcının kelimelerine de sadece kendisi erişebilir.
       match /words/{wordId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
 
-    // 3. LİDERLİK TABLOSU (Arena)
-    // Okuma: Herkes görebilir (Sıralama için).
-    // Yazma: Kullanıcı sadece kendi skorunu güncelleyebilir.
+    // 3. LİDERLİK TABLOSU (YARI GENEL)
+    // Arena sıralaması için gereklidir.
     match /leaderboard/{userId} {
+      // OKUMA: Giriş yapmış herkes tüm listeyi görebilir (Sıralama ekranı için şart).
       allow read: if request.auth != null;
+      
+      // YAZMA: Bir kullanıcı sadece *kendi* skorunu güncelleyebilir.
+      // Başkasının puanını değiştiremez.
       allow write: if request.auth != null && request.auth.uid == userId;
     }
   }
