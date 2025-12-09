@@ -1,23 +1,43 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { WordData, UserLevel, UserGoal, GeneratedStory, ChatMessage } from "../types";
 
-// Robustly get API Key from process.env or window polyfill
+// Robustly get API Key from various sources
 const getApiKey = (): string => {
-    // 1. Try standard process.env (build-time replacement)
+    let key = '';
+
+    // 1. Try standard process.env (Node/Webpack/Parcel replacement)
     try {
+        // @ts-ignore
         if (typeof process !== 'undefined' && process.env?.API_KEY) {
-            return process.env.API_KEY;
+            // @ts-ignore
+            key = process.env.API_KEY;
         }
     } catch(e) {}
 
-    // 2. Try window.process polyfill (runtime polyfill)
-    if (typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
-        return (window as any).process.env.API_KEY;
+    // 2. Try Vite-style import.meta.env (Common in Vercel/modern builds)
+    if (!key) {
+        try {
+            // @ts-ignore
+            if (typeof import.meta !== 'undefined' && import.meta.env) {
+                // @ts-ignore
+                if (import.meta.env.API_KEY) key = import.meta.env.API_KEY;
+                // @ts-ignore
+                else if (import.meta.env.VITE_API_KEY) key = import.meta.env.VITE_API_KEY;
+                // @ts-ignore
+                else if (import.meta.env.NEXT_PUBLIC_API_KEY) key = import.meta.env.NEXT_PUBLIC_API_KEY;
+            }
+        } catch (e) {}
+    }
+
+    // 3. Try window.process polyfill (Runtime polyfill from index.html)
+    if (!key && typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
+        key = (window as any).process.env.API_KEY;
     }
     
-    // Warn but don't crash yet
-    console.warn("Gemini API Key is missing! AI features will not work.");
-    return "";
+    if (!key) {
+        console.warn("Gemini API Key is missing! AI features will not work.");
+    }
+    return key;
 };
 
 // Lazy initialization to prevent app crash if key is missing on load
@@ -25,10 +45,8 @@ let aiInstance: GoogleGenAI | null = null;
 const getAi = () => {
     if (!aiInstance) {
         const apiKey = getApiKey();
-        // The SDK constructor throws if apiKey is empty string or undefined.
-        // We explicitly throw a helpful error here to catch it in UI.
         if (!apiKey) {
-            throw new Error("API Key is missing. Please check your configuration.");
+            throw new Error("API Key is missing. If you are on Vercel, try naming it 'VITE_API_KEY' or 'NEXT_PUBLIC_API_KEY'.");
         }
         aiInstance = new GoogleGenAI({ apiKey });
     }
