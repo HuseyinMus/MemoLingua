@@ -1,6 +1,6 @@
-
+// ... existing imports
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { UserWord, AppView, SRSState, UserProfile, StudyMode, UserLevel, UserGoal, GeneratedStory, Achievement, LeaderboardEntry, WordData, ChatMessage, ChatScenario } from './types';
+import { UserWord, AppView, SRSState, UserProfile, StudyMode, UserLevel, UserGoal, GeneratedStory, Achievement, LeaderboardEntry, WordData, ChatMessage, ChatScenario, SRSHistoryItem } from './types';
 import { generateDailyBatch, generateAudio, playGeminiAudio, generateContextualStory, generateSingleWord, generateRoleplayResponse } from './services/geminiService';
 import { auth, db } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -15,8 +15,10 @@ import { Auth } from './components/Auth';
 import { Tour } from './components/Tour';
 import { AdBanner } from './components/AdBanner';
 
-import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Lock } from 'lucide-react';
+import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Lock, Plus, BookMarked, PieChart, TrendingUp, Activity } from 'lucide-react';
+// ... existing constants
 
+// ... existing helper functions (deepSanitize, safeStringify, cleanProfile, cleanWord, etc.)
 const PROFILE_STORAGE_KEY = 'memolingua_profile_v1';
 const STORY_STORAGE_KEY = 'memolingua_stories_v1';
 
@@ -113,6 +115,7 @@ const cleanWord = (data: any): UserWord => {
 
     if (data.audioBase64) word.audioBase64 = String(data.audioBase64);
     if (data.mnemonic) word.mnemonic = String(data.mnemonic);
+    if (Array.isArray(data.history)) word.history = data.history;
 
     return word;
 };
@@ -157,6 +160,7 @@ const CHAT_SCENARIOS: ChatScenario[] = [
 ];
 
 export default function App() {
+  // ... existing state definitions
   const [view, setView] = useState<AppView>(AppView.AUTH);
   const [words, setWords] = useState<UserWord[]>([]);
   const [stories, setStories] = useState<GeneratedStory[]>([]);
@@ -168,7 +172,9 @@ export default function App() {
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeStory, setActiveStory] = useState<GeneratedStory | null>(null);
-  const [selectedWordForAdd, setSelectedWordForAdd] = useState<WordData | null>(null);
+  
+  const [selectedWordForAdd, setSelectedWordForAdd] = useState<WordData | null>(null); 
+  const [previewWord, setPreviewWord] = useState<WordData | null>(null); 
   const [isLookupLoading, setIsLookupLoading] = useState(false);
   
   const [studioMode, setStudioMode] = useState<'hub' | 'stories' | 'roleplay' | 'chat'>('hub');
@@ -226,6 +232,7 @@ export default function App() {
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, isChatTyping]);
 
+  // ... existing useEffects for Auth, Leaderboard, AutoGen, Theme, LocalStorage, Focus ...
   useEffect(() => {
     let unsubscribeWords: () => void;
     let isMounted = true;
@@ -450,6 +457,7 @@ export default function App() {
     }
   }, [view, dueWords.length, weakWords.length, activeStory, studioMode]);
 
+  // ... saveProfile, saveWordsBatch, updateWordInDb, updateDailyProgress ...
   const saveProfile = async (profile: UserProfile) => {
     const sanitizedProfile = deepSanitize(cleanProfile(profile));
     setUserProfile(sanitizedProfile);
@@ -562,6 +570,7 @@ export default function App() {
       setView(AppView.AUTH);
   };
 
+  // ... getNextIntervals, getStudyModeForWord, playWordAudio, handleGenerateDaily ...
   const getNextIntervals = (word: UserWord) => {
     const { interval } = word.srs;
     if (interval < 1) {
@@ -584,19 +593,25 @@ export default function App() {
       if (overrideMode !== 'auto') return overrideMode;
       const streak = word.srs.streak;
       const ease = word.srs.easeFactor;
+      
       if (ease < 2.0) {
-          if (streak > 4) return 'writing';
+          if (streak > 3) return 'writing';
           return 'meaning';
       }
-      if (streak <= 1) return 'meaning';
-      if (streak === 2) return 'translation';
-      if (streak <= 4) return 'context';
-      if (streak <= 6) return 'writing';
-      if (Math.random() > 0.7) return 'speaking';
+      
+      if (streak <= 1) return 'meaning';      
+      if (streak === 2) return 'translation'; 
+      if (streak === 3) return 'speaking';    
+      if (streak <= 5) return 'context';      
+      if (streak <= 7) return 'writing';      
+      
+      const rand = Math.random();
+      if (rand < 0.4) return 'speaking';
+      if (rand < 0.7) return 'context';
       return 'writing';
   };
 
-  const playWordAudio = async (word: UserWord) => {
+  const playWordAudio = async (word: UserWord | WordData) => {
       if (playingWordId) return;
       setPlayingWordId(word.id);
       try {
@@ -654,28 +669,46 @@ export default function App() {
       }
   };
 
+  // ... handleManualSearch, handleAddPreviewWord, handleGenerateStory, handleUpdateSRS, handleStudyResult, startScenario, handleSendMessage, handleAddWordFromStory ...
   const handleManualSearch = async () => {
       if (!searchTerm.trim() || !userProfile) return;
       setIsSearching(true);
       try {
           const newWordData = await generateSingleWord(searchTerm, userProfile.level);
-          const newWord: UserWord = {
-              ...newWordData,
-              dateAdded: Date.now(),
-              srs: { nextReview: Date.now(), interval: 0, easeFactor: 2.5, streak: 0 }
-          };
-          await saveWordsBatch([newWord]);
-          generateAudio(newWord.term).then(audio => {
-              if (audio) updateWordInDb({ ...newWord, audioBase64: audio });
-          });
+          setPreviewWord(newWordData);
           setSearchTerm('');
-          setView(AppView.STUDY);
       } catch (e) {
           console.error(e);
           alert("Kelime bulunamadı. Tekrar deneyin.");
       } finally { setIsSearching(false); }
   };
   
+  const handleAddPreviewWord = async () => {
+      if (!previewWord) return;
+      setIsLookupLoading(true);
+      try {
+          const newWord: UserWord = {
+              ...previewWord,
+              id: crypto.randomUUID(),
+              dateAdded: Date.now(),
+              srs: { nextReview: Date.now(), interval: 0, easeFactor: 2.5, streak: 0 }
+          };
+          await saveWordsBatch([newWord]);
+          
+          generateAudio(newWord.term).then(audio => {
+              if (audio) updateWordInDb({ ...newWord, audioBase64: audio });
+          });
+          
+          setPreviewWord(null);
+          alert(`${newWord.term} başarıyla listene eklendi!`);
+      } catch (e) {
+          console.error(e);
+          alert("Eklenirken bir hata oluştu.");
+      } finally {
+          setIsLookupLoading(false);
+      }
+  };
+
   const handleGenerateStory = async () => {
     if (!userProfile) return;
     setIsGenerating(true);
@@ -722,7 +755,16 @@ export default function App() {
       let nextReview = now + (interval * 24 * 60 * 60 * 1000);
       if (grade === 'again') { nextReview = now + (1 * 60 * 1000); interval = 0; }
       const newSRS = { nextReview, interval, easeFactor, streak };
-      await updateWordInDb({ ...word, srs: newSRS });
+      
+      const historyItem: SRSHistoryItem = {
+          date: now,
+          grade,
+          interval
+      };
+      
+      const updatedHistory = [...(word.history || []), historyItem];
+      
+      await updateWordInDb({ ...word, srs: newSRS, history: updatedHistory });
       setSessionResults(prev => [...prev, { wordId: word.id, term: word.term, isCorrect: grade !== 'again', grade }]);
       setSessionCount(prev => prev + 1);
       if (grade !== 'again') {
@@ -771,6 +813,7 @@ export default function App() {
       } catch (e) { console.error(e); } finally { setIsLookupLoading(false); }
   };
 
+  // ... renderWordEditor, renderPreviewModal, renderStudy, renderStudio, renderLibrary, renderDashboard, renderDiscover ...
   function renderWordEditor() {
       if (!editingWord) return null;
       return (
@@ -804,73 +847,161 @@ export default function App() {
       );
   }
 
+  function renderPreviewModal() {
+      if (!previewWord) return null;
+      return (
+          <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
+              <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-slide-up border border-zinc-100 dark:border-zinc-800 relative">
+                  <div className="text-center mb-6">
+                      <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Kelime Bulundu</div>
+                      <h2 className="text-4xl font-black text-black dark:text-white mb-2">{previewWord.term}</h2>
+                      <p className="text-lg text-zinc-500 font-medium">{previewWord.translation}</p>
+                      <div className="flex justify-center mt-3">
+                        <button onClick={() => playWordAudio(previewWord)} className="flex items-center gap-2 px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-full text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                             <Volume2 size={14} /> /{previewWord.pronunciation}/
+                        </button>
+                      </div>
+                  </div>
+                  
+                  <div className="bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-2xl mb-6">
+                      <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Tanım</p>
+                      <p className="text-sm text-black dark:text-white font-medium mb-3 leading-relaxed">"{previewWord.definition}"</p>
+                      
+                      <div className="h-px bg-zinc-200 dark:bg-zinc-700 w-full my-3 opacity-50"></div>
+                      
+                      <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Örnek</p>
+                      <p className="text-sm text-zinc-600 dark:text-zinc-300 italic">"{previewWord.exampleSentence}"</p>
+                  </div>
+
+                  <div className="flex gap-3">
+                      <button 
+                        onClick={() => setPreviewWord(null)} 
+                        className="flex-1 py-3.5 text-zinc-500 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
+                      >
+                          Vazgeç
+                      </button>
+                      <button 
+                        onClick={handleAddPreviewWord} 
+                        disabled={isLookupLoading} 
+                        className="flex-[2] py-3.5 bg-black dark:bg-white text-white dark:text-black font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
+                      >
+                          {isLookupLoading ? <Loader2 className="animate-spin" /> : <Plus size={18} />}
+                          Listeme Ekle
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )
+  }
+
   function renderStudy() {
-    const sessionWords = dueWords.length > 0 ? dueWords : weakWords;
-    if (sessionWords.length === 0 || sessionCount >= initialSessionSize) {
-        return (
-            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in text-center">
-                 <div className="w-24 h-24 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6 text-green-600 dark:text-green-400"><CheckCircle2 size={48} /></div>
-                 <h2 className="text-3xl font-black mb-2 text-black dark:text-white">Oturum Tamamlandı!</h2>
-                 <p className="text-zinc-500 mb-8">Tüm kelimeleri çalıştın.</p>
-                 <div className="w-full max-w-sm bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-4 mb-8">
-                     <div className="flex justify-between items-center mb-2"><span className="text-sm font-bold text-zinc-400 uppercase">Doğru</span><span className="font-bold text-green-500">{sessionResults.filter(r => r.isCorrect).length}</span></div>
-                     <div className="flex justify-between items-center"><span className="text-sm font-bold text-zinc-400 uppercase">Yanlış</span><span className="font-bold text-red-500">{sessionResults.filter(r => !r.isCorrect).length}</span></div>
-                 </div>
-                 <button onClick={() => setView(AppView.DASHBOARD)} className="w-full max-w-xs py-4 bg-black dark:bg-white text-white dark:text-black font-bold rounded-xl">Ana Sayfaya Dön</button>
-            </div>
-        )
-    }
-    const currentWord = sessionWords[0];
-    const mode = getStudyModeForWord(currentWord);
-    return (
-        <div className="flex-1 h-full flex flex-col pt-8 pb-4 overflow-hidden">
-            <header className="px-6 mb-2 flex justify-between items-center shrink-0">
-                 <button onClick={() => setView(AppView.DASHBOARD)} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"><X size={24} className="text-black dark:text-white" /></button>
-                 <div className="flex flex-col items-center">
-                     <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Oturum</span>
-                     <span className="font-bold text-black dark:text-white">{sessionCount + 1} / {initialSessionSize}</span>
-                 </div>
-                 <button onClick={() => setShowModeMenu(!showModeMenu)} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"><MoreHorizontal size={24} className="text-black dark:text-white" /></button>
-            </header>
-            <div className="flex-1 px-4 pb-4 overflow-hidden relative">
-                <StudyCard 
-                    key={currentWord.id + mode}
-                    word={currentWord}
-                    mode={mode}
-                    onResult={handleStudyResult}
-                    nextIntervals={getNextIntervals(currentWord)}
-                    onUpdateSRS={(newSRS) => handleUpdateSRS(currentWord.id, newSRS)}
-                />
-            </div>
-        </div>
-    );
+      // ... (existing implementation)
+      const sessionWords = dueWords.length > 0 ? dueWords : weakWords;
+      if (sessionWords.length === 0 || sessionCount >= initialSessionSize) {
+          return (
+              <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in text-center">
+                   <div className="w-24 h-24 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-6 text-green-600 dark:text-green-400"><CheckCircle2 size={48} /></div>
+                   <h2 className="text-3xl font-black mb-2 text-black dark:text-white">Oturum Tamamlandı!</h2>
+                   <p className="text-zinc-500 mb-8">Tüm kelimeleri çalıştın.</p>
+                   <div className="w-full max-w-sm bg-zinc-50 dark:bg-zinc-900 rounded-2xl p-4 mb-8">
+                       <div className="flex justify-between items-center mb-2"><span className="text-sm font-bold text-zinc-400 uppercase">Doğru</span><span className="font-bold text-green-500">{sessionResults.filter(r => r.isCorrect).length}</span></div>
+                       <div className="flex justify-between items-center"><span className="text-sm font-bold text-zinc-400 uppercase">Yanlış</span><span className="font-bold text-red-500">{sessionResults.filter(r => !r.isCorrect).length}</span></div>
+                   </div>
+                   <button onClick={() => setView(AppView.DASHBOARD)} className="w-full max-w-xs py-4 bg-black dark:bg-white text-white dark:text-black font-bold rounded-xl">Ana Sayfaya Dön</button>
+              </div>
+          )
+      }
+      const currentWord = sessionWords[0];
+      const mode = getStudyModeForWord(currentWord);
+      return (
+          <div className="flex-1 h-full flex flex-col pt-8 pb-4 overflow-hidden relative">
+              <header className="px-6 mb-2 flex justify-between items-center shrink-0 z-50 relative">
+                   <button onClick={() => setView(AppView.DASHBOARD)} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"><X size={24} className="text-black dark:text-white" /></button>
+                   <div className="flex flex-col items-center">
+                       <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Oturum</span>
+                       <span className="font-bold text-black dark:text-white">{sessionCount + 1} / {initialSessionSize}</span>
+                   </div>
+                   <button onClick={() => setShowModeMenu(!showModeMenu)} className={`p-2 rounded-full transition-colors ${showModeMenu ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}><MoreHorizontal size={24} className="text-black dark:text-white" /></button>
+              </header>
+  
+              {/* Menu Dropdown */}
+              {showModeMenu && (
+                  <>
+                      <div className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]" onClick={() => setShowModeMenu(false)}></div>
+                      <div className="absolute top-20 right-6 z-50 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-2 min-w-[180px] animate-fade-in origin-top-right">
+                          <p className="px-3 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-100 dark:border-zinc-800 mb-1">Çalışma Modu</p>
+                          {[
+                              { id: 'auto', label: 'Otomatik (AI)', icon: '✨' },
+                              { id: 'meaning', label: 'Anlam', icon: '👀' },
+                              { id: 'context', label: 'Bağlam', icon: '📝' },
+                              { id: 'writing', label: 'Yazma', icon: '⌨️' },
+                              { id: 'speaking', label: 'Konuşma', icon: '🎙️' },
+                              { id: 'translation', label: 'Çeviri', icon: '🇹🇷' },
+                          ].map(m => (
+                              <button
+                                  key={m.id}
+                                  onClick={() => { setOverrideMode(m.id as any); setShowModeMenu(false); }}
+                                  className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-3 transition-colors ${overrideMode === m.id ? 'bg-black dark:bg-white text-white dark:text-black' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800 text-black dark:text-white'}`}
+                              >
+                                  <span className="text-base">{m.icon}</span>
+                                  {m.label}
+                              </button>
+                          ))}
+                      </div>
+                  </>
+              )}
+  
+              <div className="flex-1 px-4 pb-4 overflow-hidden relative z-0">
+                  <StudyCard 
+                      key={currentWord.id + mode}
+                      word={currentWord}
+                      mode={mode}
+                      onResult={handleStudyResult}
+                      nextIntervals={getNextIntervals(currentWord)}
+                      onUpdateSRS={(newSRS) => handleUpdateSRS(currentWord.id, newSRS)}
+                  />
+              </div>
+          </div>
+      );
   }
 
   function renderStudio() {
+    // ... (existing implementation)
     if (activeStory) {
         const pages = storyPages;
         const content = pages[currentStoryPage];
         return (
-             <div className="h-full flex flex-col bg-white dark:bg-zinc-950">
-                 <header className="flex items-center justify-between p-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
-                     <button onClick={() => { setActiveStory(null); setStudioMode('stories'); }}><ArrowLeft /></button>
+             <div className="h-full flex flex-col bg-white dark:bg-zinc-950 pt-safe">
+                 <header className="flex items-center justify-between p-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0 sticky top-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md z-10">
+                     <button 
+                        onClick={() => { setActiveStory(null); setStudioMode('stories'); }} 
+                        className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                     >
+                        <ArrowLeft className="text-black dark:text-white" />
+                     </button>
+                     <div className="flex flex-col items-center">
+                         <h3 className="text-sm font-bold text-black dark:text-white max-w-[200px] truncate">{activeStory.title}</h3>
+                         <span className="text-[10px] text-zinc-500 uppercase tracking-widest">{currentStoryPage + 1} / {pages.length}</span>
+                     </div>
                      <div className="flex gap-2">
-                         <button onClick={() => setShowReaderSettings(!showReaderSettings)}><BookOpen /></button>
+                         <button onClick={() => setShowReaderSettings(!showReaderSettings)} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"><BookOpen size={20} className="text-black dark:text-white"/></button>
                      </div>
                  </header>
                  <div className={`flex-1 overflow-y-auto p-6 ${readerFont} ${readerFontSize} leading-relaxed text-black dark:text-white`}>
                      {content.split(/(\b)/).map((part, i) => {
                          const vocab = activeStory.vocabulary.find(v => v.term.toLowerCase() === part.toLowerCase());
                          if (vocab) {
-                             return <span key={i} onClick={() => setSelectedWordForAdd(vocab)} className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 cursor-pointer border-b-2 border-yellow-300">{part}</span>
+                             return <span key={i} onClick={() => setSelectedWordForAdd(vocab)} className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 cursor-pointer border-b-2 border-yellow-300 hover:bg-yellow-200 transition-colors">{part}</span>
                          }
                          return <span key={i}>{part}</span>
                      })}
                  </div>
-                 <footer className="p-4 flex justify-between items-center border-t border-zinc-100 dark:border-zinc-800 shrink-0">
-                     <button disabled={currentStoryPage === 0} onClick={() => setCurrentStoryPage(p => p - 1)}>Önceki</button>
-                     <span>{currentStoryPage + 1} / {pages.length}</span>
-                     <button disabled={currentStoryPage === pages.length - 1} onClick={() => setCurrentStoryPage(p => p + 1)}>Sonraki</button>
+                 <footer className="p-4 flex justify-between items-center border-t border-zinc-100 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-950">
+                     <button disabled={currentStoryPage === 0} onClick={() => setCurrentStoryPage(p => p - 1)} className="text-sm font-bold text-zinc-500 disabled:opacity-30 hover:text-black dark:hover:text-white px-4 py-2">Önceki</button>
+                     <div className="h-1 flex-1 mx-4 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-black dark:bg-white transition-all" style={{width: `${((currentStoryPage + 1) / pages.length) * 100}%`}}></div>
+                     </div>
+                     <button disabled={currentStoryPage === pages.length - 1} onClick={() => setCurrentStoryPage(p => p + 1)} className="text-sm font-bold text-zinc-500 disabled:opacity-30 hover:text-black dark:hover:text-white px-4 py-2">Sonraki</button>
                  </footer>
              </div>
         )
@@ -878,7 +1009,7 @@ export default function App() {
     if (studioMode === 'chat' && activeScenario) {
         return (
             <div className="h-full flex flex-col bg-zinc-50 dark:bg-black">
-                <header className={`p-4 bg-gradient-to-r ${activeScenario.gradient} text-white flex items-center gap-3 shadow-lg shrink-0`}>
+                <header className={`p-4 bg-gradient-to-r ${activeScenario.gradient} text-white flex items-center gap-3 shadow-lg shrink-0 pt-8`}>
                     <button onClick={() => { setStudioMode('roleplay'); setActiveScenario(null); }}><ArrowLeft /></button>
                     <div><h3 className="font-bold">{activeScenario.title}</h3><p className="text-xs opacity-80">{activeScenario.description}</p></div>
                 </header>
@@ -912,7 +1043,7 @@ export default function App() {
         return (
             <div className="p-6 pb-6 h-full overflow-y-auto scrollbar-hide space-y-6">
                 <header className="flex items-center gap-4 pt-8 mb-4">
-                     <button onClick={() => setStudioMode('hub')}><ArrowLeft /></button>
+                     <button onClick={() => setStudioMode('hub')} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"><ArrowLeft className="text-black dark:text-white" /></button>
                      <h2 className="text-3xl font-black text-black dark:text-white">Hikayeler</h2>
                 </header>
                 <button onClick={handleGenerateStory} disabled={isGenerating} className="w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg">{isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles />}{isGenerating ? 'Yazılıyor...' : 'Yeni Hikaye Oluştur'}</button>
@@ -932,7 +1063,7 @@ export default function App() {
          return (
              <div className="p-6 pb-6 h-full overflow-y-auto scrollbar-hide space-y-6">
                 <header className="flex items-center gap-4 pt-8 mb-4">
-                     <button onClick={() => setStudioMode('hub')}><ArrowLeft /></button>
+                     <button onClick={() => setStudioMode('hub')} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"><ArrowLeft className="text-black dark:text-white" /></button>
                      <h2 className="text-3xl font-black text-black dark:text-white">Roleplay</h2>
                 </header>
                 <div className="grid grid-cols-1 gap-4 pb-20">
@@ -950,9 +1081,17 @@ export default function App() {
     }
     return (
         <div className="p-6 pb-6 h-full overflow-y-auto scrollbar-hide space-y-6 animate-fade-in max-w-md mx-auto">
-            <header className="pt-8 mb-6">
-                 <h2 className="text-4xl font-black text-black dark:text-white tracking-tighter mb-2">Studio</h2>
-                 <p className="text-zinc-500 font-medium">Yapay zeka ile pratik yap.</p>
+            <header className="pt-8 mb-6 flex items-center gap-4">
+                 <button 
+                    onClick={() => setView(AppView.DASHBOARD)} 
+                    className="p-3 bg-zinc-100 dark:bg-zinc-900 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+                >
+                    <ArrowLeft size={24} className="text-black dark:text-white" />
+                </button>
+                 <div>
+                    <h2 className="text-4xl font-black text-black dark:text-white tracking-tighter mb-1">Studio</h2>
+                    <p className="text-zinc-500 font-medium">Yapay zeka ile pratik yap.</p>
+                 </div>
             </header>
             <div className="grid grid-cols-1 gap-4">
                 <button onClick={() => setStudioMode('stories')} className="bg-gradient-to-br from-indigo-500 to-purple-600 p-8 rounded-[2.5rem] text-white text-left relative overflow-hidden shadow-xl hover:shadow-indigo-500/30 transition-all group">
@@ -969,6 +1108,7 @@ export default function App() {
   }
 
   function renderLibrary() {
+      // ... (existing implementation)
       const filteredWords = words.filter(w => {
           const matchesSearch = w.term.toLowerCase().includes(librarySearch.toLowerCase()) || w.translation.toLowerCase().includes(librarySearch.toLowerCase());
           if (libraryFilter === 'all') return matchesSearch;
@@ -1014,6 +1154,7 @@ export default function App() {
   }
 
   function renderDashboard() {
+    // ... (existing implementation)
     const hours = new Date().getHours();
     const greeting = hours < 12 ? 'Günaydın' : hours < 18 ? 'Tünaydın' : 'İyi Akşamlar';
     return (
@@ -1093,6 +1234,7 @@ export default function App() {
   }
 
   function renderDiscover() {
+       // ... (existing implementation)
        return (
           <div className="p-6 pb-28 space-y-6 animate-fade-in max-w-md mx-auto">
               <header className="pt-8 mb-6"><h2 className="text-4xl font-black text-black dark:text-white tracking-tighter mb-2">Kelime Atölyesi</h2><p className="text-zinc-500 font-medium">Yeni kelimeler üret veya sözlükten ekle.</p></header>
@@ -1111,7 +1253,7 @@ export default function App() {
                       <div className="relative flex-1"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Kelime arat ve ekle..." className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 pl-12 rounded-2xl outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all shadow-sm text-black dark:text-white" onKeyDown={(e) => e.key === 'Enter' && handleManualSearch()} /></div>
                       <button onClick={handleManualSearch} disabled={isSearching} className="bg-black dark:bg-white text-white dark:text-black p-4 rounded-2xl transition-transform active:scale-95 disabled:opacity-50">{isSearching ? <Loader2 className="animate-spin" /> : <ArrowRight />}</button>
                    </div>
-                   <p className="text-xs text-zinc-400 mt-2 pl-2">Aradığın kelime için otomatik olarak çeviri, tanım ve telaffuz oluşturulur.</p>
+                   <p className="text-xs text-zinc-400 mt-2 pl-2">Aradığın kelime önce gösterilir, sonra istersen ekleyebilirsin.</p>
               </div>
               <div className="mt-8">
                   <div className="flex justify-between items-center mb-4"><h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Son Eklenenler</h3><button onClick={() => setShowLibrary(true)} className="text-xs font-bold text-blue-600 dark:text-blue-400">Tümü</button></div>
@@ -1133,12 +1275,27 @@ export default function App() {
       const achievements: Achievement[] = [
           { id: '1', title: 'İlk Adım', description: 'İlk kelimeni öğrendin', icon: '🌱', unlocked: (words.length > 0), progress: Math.min(1, words.length), maxProgress: 1 },
           { id: '2', title: 'Kelime Avcısı', description: '50 kelimeye ulaş', icon: '🏹', unlocked: (words.length >= 50), progress: Math.min(50, words.length), maxProgress: 50 },
-          { id: '3', title: 'Ateşli', description: '3 günlük seri yap', icon: '🔥', unlocked: true, progress: 1, maxProgress: 3 }, 
+          { id: '3', title: 'Ateşli', description: '3 günlük seri yap', icon: '🔥', unlocked: true, progress: userProfile?.streak || 0, maxProgress: 3 }, 
           { id: '4', title: 'Hikaye Anlatıcı', description: 'İlk hikayeni oluştur', icon: '📖', unlocked: (stories.length > 0), progress: stories.length, maxProgress: 1 },
       ];
 
+      // Calculate Statistics
+      const masteredCount = words.filter(w => w.srs.streak >= 5).length;
+      const learningCount = words.filter(w => w.srs.streak > 0 && w.srs.streak < 5).length;
+      const newCount = words.filter(w => w.srs.streak === 0).length;
+      
+      const totalWords = words.length;
+      const masteryPercentage = totalWords > 0 ? (masteredCount / totalWords) * 100 : 0;
+      const learningPercentage = totalWords > 0 ? (learningCount / totalWords) * 100 : 0;
+      
+      // Calculate Word Types
+      const nouns = words.filter(w => w.type.toLowerCase().includes('noun')).length;
+      const verbs = words.filter(w => w.type.toLowerCase().includes('verb')).length;
+      const adjs = words.filter(w => w.type.toLowerCase().includes('adj')).length;
+      const totalTyped = nouns + verbs + adjs || 1;
+
       return (
-          <div className="p-6 pb-28 space-y-8 animate-fade-in max-w-md mx-auto">
+          <div className="p-6 pb-28 space-y-6 animate-fade-in max-w-md mx-auto">
               <header className="pt-8 flex justify-between items-start">
                   <div className="flex items-center gap-4">
                       <div className="w-16 h-16 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-4xl shadow-inner border border-zinc-200 dark:border-zinc-700">{userProfile?.avatar || '🎓'}</div>
@@ -1149,26 +1306,78 @@ export default function App() {
                   </div>
                   <button onClick={() => setView(AppView.SETTINGS)} className="p-3 bg-zinc-100 dark:bg-zinc-900 rounded-2xl text-zinc-500 hover:text-black dark:hover:text-white transition-colors"><SettingsIcon size={24} /></button>
               </header>
+
+              {/* Progress Ring Card */}
+              <div className="bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-xl flex items-center gap-6">
+                 <div className="relative w-32 h-32 flex-shrink-0">
+                     <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                        <path className="text-zinc-100 dark:text-zinc-800" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                        <path className="text-blue-500 transition-all duration-1000 ease-out" strokeDasharray={`${learningPercentage + masteryPercentage}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                        <path className="text-green-500 transition-all duration-1000 ease-out" strokeDasharray={`${masteryPercentage}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                     </svg>
+                     <div className="absolute inset-0 flex flex-col items-center justify-center">
+                         <span className="text-3xl font-black text-black dark:text-white">{totalWords}</span>
+                         <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Kelime</span>
+                     </div>
+                 </div>
+                 <div className="flex-1 space-y-3">
+                     <div>
+                         <div className="flex justify-between text-xs font-bold mb-1"><span className="text-green-600 dark:text-green-400">Ezberlendi</span><span>{masteredCount}</span></div>
+                         <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{width: `${masteryPercentage}%`}}></div></div>
+                     </div>
+                     <div>
+                         <div className="flex justify-between text-xs font-bold mb-1"><span className="text-blue-600 dark:text-blue-400">Öğreniliyor</span><span>{learningCount}</span></div>
+                         <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{width: `${learningPercentage}%`}}></div></div>
+                     </div>
+                     <div>
+                         <div className="flex justify-between text-xs font-bold mb-1"><span className="text-zinc-500">Yeni</span><span>{newCount}</span></div>
+                         <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-zinc-300 dark:bg-zinc-700" style={{width: `${totalWords > 0 ? (newCount/totalWords)*100 : 0}%`}}></div></div>
+                     </div>
+                 </div>
+              </div>
+
+              {/* Detailed Stats */}
               <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-orange-50 dark:bg-orange-900/20 p-5 rounded-[2rem] border border-orange-100 dark:border-orange-900/30">
-                      <div className="flex items-center gap-2 mb-2 text-orange-600 dark:text-orange-400"><Flame size={20} fill="currentColor" /><span className="text-xs font-bold uppercase tracking-widest">Seri</span></div>
-                      <div className="text-3xl font-black text-black dark:text-white">{userProfile?.streak || 0} <span className="text-sm text-zinc-400 font-medium">Gün</span></div>
+                  <div className="bg-zinc-50 dark:bg-zinc-900 p-5 rounded-3xl border border-zinc-200 dark:border-zinc-800">
+                      <div className="flex items-center gap-2 mb-2 text-orange-500"><Flame size={20} /><span className="text-xs font-bold uppercase tracking-widest">Seri</span></div>
+                      <div className="text-3xl font-black text-black dark:text-white">{userProfile?.streak} <span className="text-xs font-medium text-zinc-400">Gün</span></div>
                   </div>
-                  <div className="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-[2rem] border border-blue-100 dark:border-blue-900/30">
-                      <div className="flex items-center gap-2 mb-2 text-blue-600 dark:text-blue-400"><BookOpen size={20} /><span className="text-xs font-bold uppercase tracking-widest">Kelime</span></div>
-                      <div className="text-3xl font-black text-black dark:text-white">{words.length}</div>
+                  <div className="bg-zinc-50 dark:bg-zinc-900 p-5 rounded-3xl border border-zinc-200 dark:border-zinc-800">
+                      <div className="flex items-center gap-2 mb-2 text-purple-500"><TrendingUp size={20} /><span className="text-xs font-bold uppercase tracking-widest">XP</span></div>
+                      <div className="text-3xl font-black text-black dark:text-white">{userProfile?.xp}</div>
                   </div>
-                  <div className="bg-yellow-50 dark:bg-yellow-900/20 p-5 rounded-[2rem] border border-yellow-100 dark:border-yellow-900/30 col-span-2 flex items-center justify-between">
-                      <div><div className="flex items-center gap-2 mb-2 text-yellow-600 dark:text-yellow-400"><Trophy size={20} /><span className="text-xs font-bold uppercase tracking-widest">Lig</span></div><div className="text-3xl font-black text-black dark:text-white">{userProfile?.league || 'Bronze'}</div><p className="text-xs text-yellow-600/70 dark:text-yellow-400/70 font-bold mt-1">{userProfile?.xp} XP Toplam</p></div>
-                      <div className="w-16 h-16 bg-white dark:bg-zinc-900 rounded-full flex items-center justify-center text-3xl shadow-sm border border-yellow-100 dark:border-yellow-800">{userProfile?.league === 'Diamond' ? '💎' : userProfile?.league === 'Platinum' ? '💠' : userProfile?.league === 'Gold' ? '🏆' : userProfile?.league === 'Silver' ? '🥈' : '🥉'}</div>
-                  </div>
-                  <div className="col-span-2 bg-purple-50 dark:bg-purple-900/20 p-5 rounded-[2rem] border border-purple-100 dark:border-purple-900/30 flex justify-between items-center">
-                      <div><div className="flex items-center gap-2 mb-1 text-purple-600 dark:text-purple-400"><Snowflake size={20} /><span className="text-xs font-bold uppercase tracking-widest">Seri Dondurucu</span></div><p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">{userProfile?.streakFreeze || 0} dondurucun var.</p></div>
-                      <button onClick={handleBuyFreeze} className="px-4 py-2 bg-white dark:bg-zinc-900 rounded-xl text-xs font-bold shadow-sm hover:scale-105 active:scale-95 transition-all text-purple-600 dark:text-purple-400 flex flex-col items-center"><span>+1 Al</span><span className="text-[10px] opacity-70">200 XP</span></button>
+                  <div className="col-span-2 bg-zinc-50 dark:bg-zinc-900 p-5 rounded-3xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                       <div><div className="flex items-center gap-2 mb-2 text-yellow-500"><Trophy size={20} /><span className="text-xs font-bold uppercase tracking-widest">Lig</span></div><div className="text-2xl font-black text-black dark:text-white">{userProfile?.league || 'Bronze'}</div></div>
+                       <div className="w-12 h-12 bg-white dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-2xl shadow-sm">{userProfile?.league === 'Diamond' ? '💎' : userProfile?.league === 'Platinum' ? '💠' : userProfile?.league === 'Gold' ? '🏆' : userProfile?.league === 'Silver' ? '🥈' : '🥉'}</div>
                   </div>
               </div>
+              
+              {/* Word Distribution */}
+              {totalWords > 0 && (
+                  <div className="bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                      <div className="flex items-center gap-2 mb-6"><PieChart size={20} className="text-zinc-400" /><h3 className="font-bold text-black dark:text-white">Kelime Türleri</h3></div>
+                      <div className="space-y-4">
+                          <div className="flex items-center gap-4">
+                              <span className="text-xs font-bold w-12 text-zinc-500">İsim</span>
+                              <div className="flex-1 h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-indigo-500" style={{width: `${(nouns/totalTyped)*100}%`}}></div></div>
+                              <span className="text-xs font-bold">{nouns}</span>
+                          </div>
+                           <div className="flex items-center gap-4">
+                              <span className="text-xs font-bold w-12 text-zinc-500">Fiil</span>
+                              <div className="flex-1 h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-rose-500" style={{width: `${(verbs/totalTyped)*100}%`}}></div></div>
+                              <span className="text-xs font-bold">{verbs}</span>
+                          </div>
+                           <div className="flex items-center gap-4">
+                              <span className="text-xs font-bold w-12 text-zinc-500">Sıfat</span>
+                              <div className="flex-1 h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-cyan-500" style={{width: `${(adjs/totalTyped)*100}%`}}></div></div>
+                              <span className="text-xs font-bold">{adjs}</span>
+                          </div>
+                      </div>
+                  </div>
+              )}
+
               <div>
-                  <h3 className="font-bold text-black dark:text-white text-lg mb-4">Başarılar</h3>
+                  <h3 className="font-bold text-black dark:text-white text-lg mb-4 px-1">Başarılar</h3>
                   <div className="space-y-3">
                       {achievements.map(ach => (
                           <div key={ach.id} className={`p-4 rounded-2xl border flex items-center gap-4 ${ach.unlocked ? 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 shadow-sm' : 'bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 opacity-60'}`}>
@@ -1209,6 +1418,8 @@ export default function App() {
 
       {showLibrary && renderLibrary()}
       {editingWord && renderWordEditor()}
+      {previewWord && renderPreviewModal()}
+      
       {selectedWordForAdd && (
           <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
               <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-slide-up border border-zinc-100 dark:border-zinc-800 text-center">
@@ -1225,7 +1436,7 @@ export default function App() {
           <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[80] bg-black/80 dark:bg-white/90 backdrop-blur-md text-white dark:text-black px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 animate-slide-up"><Sparkles className="text-yellow-400 dark:text-yellow-600" size={20} fill="currentColor" /><div className="flex flex-col"><span className="text-xs font-bold uppercase tracking-widest opacity-80">MemoLingua AI</span><span className="font-bold text-sm">Günlük kelimelerin hazır!</span></div></div>
       )}
 
-      {view !== AppView.STUDIO && view !== AppView.STUDY && view !== AppView.SETTINGS && !showLibrary && !editingWord && !isKeyboardOpen && (
+      {view !== AppView.STUDIO && view !== AppView.STUDY && view !== AppView.SETTINGS && !showLibrary && !editingWord && !previewWord && !isKeyboardOpen && (
           <Navigation currentView={view} setView={setView} />
       )}
     </div>

@@ -1,4 +1,5 @@
 
+
 export interface WordData {
   id: string;
   term: string;
@@ -19,9 +20,16 @@ export interface SRSState {
   streak: number;
 }
 
+export interface SRSHistoryItem {
+  date: number;
+  grade: 'again' | 'hard' | 'good' | 'easy';
+  interval: number;
+}
+
 export interface UserWord extends WordData {
   srs: SRSState;
   dateAdded: number;
+  history?: SRSHistoryItem[];
 }
 
 export enum AppView {

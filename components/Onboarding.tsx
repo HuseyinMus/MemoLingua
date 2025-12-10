@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Target, GraduationCap, ArrowRight, Flame, Clock } from 'lucide-react';
+import { Target, GraduationCap, ArrowRight, Flame, Clock, ArrowLeft } from 'lucide-react';
 import { UserLevel, UserGoal, UserProfile } from '../types';
 
 interface OnboardingProps {
@@ -47,7 +48,17 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     };
 
     return (
-        <div className="h-full w-full bg-white dark:bg-zinc-950 flex flex-col p-8 animate-fade-in max-w-md mx-auto transition-colors duration-300">
+        <div className="h-full w-full bg-white dark:bg-zinc-950 flex flex-col p-8 animate-fade-in max-w-md mx-auto transition-colors duration-300 relative">
+            {/* Back Button */}
+            {step > 0 && (
+                <button 
+                    onClick={() => setStep(s => s - 1)} 
+                    className="absolute top-6 left-6 p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors z-20"
+                >
+                    <ArrowLeft className="text-black dark:text-white" size={24} />
+                </button>
+            )}
+
             {step === 0 && (
                 <div className="flex-1 flex flex-col justify-center">
                     <h1 className="text-4xl font-bold mb-4 tracking-tighter text-black dark:text-white">MemoLingua'ya Hoş Geldin.</h1>

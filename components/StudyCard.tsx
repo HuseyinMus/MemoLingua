@@ -1,4 +1,7 @@
 
+
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Eye, ArrowRight, Lightbulb, Keyboard, Waves, AlertCircle, X, Check, Mic, MicOff, BrainCircuit, Loader2 } from 'lucide-react';
 import { UserWord, SRSState, StudyMode } from '../types';
@@ -115,6 +118,8 @@ const calculateScore = (target: string, spoken: string) => {
     return Math.round(score);
 };
 
+const formatDate = (ts: number) => new Date(ts).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+
 export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, nextIntervals, onUpdateSRS }) => {
   const [showAnswer, setShowAnswer] = useState(false);
   const [input, setInput] = useState('');
@@ -138,6 +143,7 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
   const [isListening, setIsListening] = useState(false);
   const [spokenText, setSpokenText] = useState('');
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const [pronunciationScore, setPronunciationScore] = useState<number>(0);
   const recognitionRef = useRef<any>(null);
 
@@ -173,6 +179,11 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
     
     // Check if mnemonic is already loaded in word data
     setMnemonic(word.mnemonic || null);
+    
+    if (mode === 'speaking') {
+         const hasSupport = !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+         setIsSpeechSupported(hasSupport);
+    }
     
     if (mode === 'writing' || mode === 'context' || mode === 'translation') {
         setTimeout(() => inputRef.current?.focus(), 300);
@@ -233,7 +244,7 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
       if (!SpeechRecognition) {
-          alert("Speech recognition is not supported in this browser.");
+          setIsSpeechSupported(false);
           return;
       }
 
@@ -464,9 +475,29 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
   const renderQuestion = () => {
     // --- SPEAKING MODE ---
     if (mode === 'speaking') {
+        if (!isSpeechSupported) {
+            return (
+                <div className="flex flex-col flex-1 items-center justify-center text-center animate-fade-in p-6">
+                    <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mb-4 text-orange-600 dark:text-orange-400">
+                        <MicOff size={32} />
+                    </div>
+                    <h3 className="font-bold text-lg mb-2 text-black dark:text-white">Tarayıcı Desteklemiyor</h3>
+                    <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-6 max-w-xs">
+                        Cihazınız veya tarayıcınız ses tanıma özelliğini desteklemiyor.
+                    </p>
+                    <button 
+                        onClick={handleReveal}
+                        className="w-full bg-black dark:bg-white text-white dark:text-black py-3 rounded-xl font-bold transition-transform active:scale-95"
+                    >
+                        Cevabı Göster
+                    </button>
+                </div>
+            );
+        }
+
         if (permissionDenied) {
             return (
-                <div className="flex flex-col justify-center flex-1 text-center items-center px-4">
+                <div className="flex flex-col justify-center flex-1 text-center items-center px-4 animate-fade-in">
                      <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-4 shadow-lg shadow-red-500/10">
                         <MicOff size={32} className="text-red-500" />
                      </div>
@@ -637,7 +668,7 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
 
     // Speaking mode handled inside renderQuestion
     if (mode === 'speaking') {
-        if (permissionDenied) return null;
+        if (!isSpeechSupported || permissionDenied) return null;
          return (
              <div className="mt-2 shrink-0 w-full">
                 {!spokenText && !isListening && (
@@ -833,10 +864,33 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
                      </div>
                  )}
              </div>
+
+             {/* SRS History */}
+             {word.history && word.history.length > 0 && (
+                <div className="w-full max-w-sm mt-4 bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm shrink-0">
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3">Geçmiş İncelemeler</p>
+                    <div className="space-y-3">
+                        {word.history.slice().reverse().slice(0, 5).map((h, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs">
+                                <span className="text-zinc-500 font-medium">{formatDate(h.date)}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-0.5 rounded-md font-bold uppercase text-[10px] tracking-wide ${
+                                        h.grade === 'again' ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
+                                        h.grade === 'hard' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' :
+                                        h.grade === 'good' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' :
+                                        'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                                    }`}>{h.grade}</span>
+                                    <span className="text-zinc-400 font-mono">+{Math.round(h.interval)}g</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+             )}
          </div>
 
          {/* SRS Buttons - Fixed to Bottom */}
-         <div className="mt-4 pt-2 shrink-0 w-full max-w-md mx-auto">
+         <div className="mt-4 pt-2 shrink-0 w-full max-w-md mx-auto pb-4 md:pb-0">
              <div className="grid grid-cols-2 gap-3">
                 <SRSButton 
                     label="Tekrar" 
