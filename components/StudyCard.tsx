@@ -1,10 +1,6 @@
 
-
-
-
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, Eye, ArrowRight, Lightbulb, Keyboard, Waves, AlertCircle, X, Check, Mic, MicOff, BrainCircuit, Loader2 } from 'lucide-react';
+import { Volume2, Eye, ArrowRight, Lightbulb, Keyboard, Waves, AlertCircle, X, Check, Mic, MicOff, BrainCircuit, Loader2, ChevronDown } from 'lucide-react';
 import { UserWord, SRSState, StudyMode } from '../types';
 import { playGeminiAudio, generateMnemonic } from '../services/geminiService';
 
@@ -19,6 +15,7 @@ interface StudyCardProps {
     easy: string;
   };
   onUpdateSRS: (newSRS: SRSState) => void;
+  onChangeMode?: (mode: StudyMode | 'auto') => void;
 }
 
 // Interactive Word Component for Context Mode
@@ -121,7 +118,7 @@ const calculateScore = (target: string, spoken: string) => {
 
 const formatDate = (ts: number) => new Date(ts).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
 
-export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, nextIntervals, onUpdateSRS }) => {
+export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, nextIntervals, onUpdateSRS, onChangeMode }) => {
   const [showAnswer, setShowAnswer] = useState(false);
   const [input, setInput] = useState('');
   const [showFeedback, setShowFeedback] = useState<'correct' | 'incorrect' | null>(null);
@@ -147,6 +144,9 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   const [pronunciationScore, setPronunciationScore] = useState<number>(0);
   const recognitionRef = useRef<any>(null);
+
+  // Menu State
+  const [showModeMenu, setShowModeMenu] = useState(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -177,6 +177,7 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
     setPermissionDenied(false);
     setPronunciationScore(0);
     setShowMnemonic(false);
+    setShowModeMenu(false);
     
     // Check if mnemonic is already loaded in word data
     setMnemonic(word.mnemonic || null);
@@ -362,52 +363,72 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
     inputRef.current?.focus();
   };
 
-  const getPhaseLabel = () => {
+  const getPhaseInfo = () => {
       switch(mode) {
-          case 'meaning': return { label: 'Anlamı Ne?', bg: 'bg-zinc-100 dark:bg-zinc-800', text: 'text-zinc-600 dark:text-zinc-300' };
-          case 'translation': return { label: 'Çeviri', bg: 'bg-indigo-50 dark:bg-indigo-900/30', text: 'text-indigo-600 dark:text-indigo-300' };
-          case 'context': return { label: 'Boşluğu Doldur', bg: 'bg-purple-50 dark:bg-purple-900/30', text: 'text-purple-600 dark:text-purple-300' };
-          case 'writing': return { label: 'Yazma', bg: 'bg-orange-50 dark:bg-orange-900/30', text: 'text-orange-600 dark:text-orange-300' };
-          case 'speaking': return { label: 'Telaffuz', bg: 'bg-rose-50 dark:bg-rose-900/30', text: 'text-rose-600 dark:text-rose-300' };
-          default: return { label: 'Tekrar', bg: 'bg-zinc-100', text: 'text-zinc-500' };
+          case 'meaning': return { label: 'Anlam', bg: 'bg-zinc-100 dark:bg-zinc-800', text: 'text-zinc-600 dark:text-zinc-300', icon: '👀' };
+          case 'translation': return { label: 'Çeviri', bg: 'bg-indigo-50 dark:bg-indigo-900/30', text: 'text-indigo-600 dark:text-indigo-300', icon: '🇹🇷' };
+          case 'context': return { label: 'Bağlam', bg: 'bg-purple-50 dark:bg-purple-900/30', text: 'text-purple-600 dark:text-purple-300', icon: '📝' };
+          case 'writing': return { label: 'Yazma', bg: 'bg-orange-50 dark:bg-orange-900/30', text: 'text-orange-600 dark:text-orange-300', icon: '⌨️' };
+          case 'speaking': return { label: 'Telaffuz', bg: 'bg-rose-50 dark:bg-rose-900/30', text: 'text-rose-600 dark:text-rose-300', icon: '🎙️' };
+          default: return { label: 'Otomatik', bg: 'bg-zinc-100', text: 'text-zinc-500', icon: '✨' };
       }
   };
 
-  const phase = getPhaseLabel();
+  const phase = getPhaseInfo();
+
+  // Mode Selection Overlay
+  const renderModeMenu = () => {
+      if (!showModeMenu || !onChangeMode) return null;
+      return (
+          <div className="absolute inset-x-4 bottom-4 z-50 bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-100 dark:border-zinc-800 animate-slide-up p-2">
+              <div className="flex justify-between items-center px-4 py-2 mb-2 border-b border-zinc-100 dark:border-zinc-800">
+                  <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Çalışma Modu Seç</span>
+                  <button onClick={() => setShowModeMenu(false)} className="p-1 text-zinc-400 hover:text-black dark:hover:text-white"><X size={16}/></button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                  {[
+                      { id: 'auto', label: 'Otomatik (AI)', icon: '✨' },
+                      { id: 'meaning', label: 'Anlam', icon: '👀' },
+                      { id: 'context', label: 'Bağlam', icon: '📝' },
+                      { id: 'writing', label: 'Yazma', icon: '⌨️' },
+                      { id: 'speaking', label: 'Konuşma', icon: '🎙️' },
+                      { id: 'translation', label: 'Çeviri', icon: '🇹🇷' },
+                  ].map(m => (
+                      <button
+                          key={m.id}
+                          onClick={() => { onChangeMode(m.id as any); setShowModeMenu(false); }}
+                          className={`px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-3 transition-colors text-left ${mode === m.id && m.id !== 'auto' ? 'bg-black dark:bg-white text-white dark:text-black' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800 text-black dark:text-white'}`}
+                      >
+                          <span className="text-lg">{m.icon}</span>
+                          {m.label}
+                      </button>
+                  ))}
+              </div>
+          </div>
+      )
+  };
 
   const renderPronunciationFeedback = () => {
+      // ... existing code
       if (!spokenText) return null;
-      
       const targetChars = word.term.split('');
       const spokenClean = normalizeText(spokenText);
       const isPerfect = pronunciationScore === 100;
-      
       return (
           <div className="flex flex-col items-center gap-4 animate-fade-in w-full">
-             {/* Comparison Card */}
-             <div 
-                onClick={speak} 
-                className="cursor-pointer group relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 w-full text-center hover:border-black dark:hover:border-white transition-all shadow-sm"
-             >
+             <div onClick={speak} className="cursor-pointer group relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 w-full text-center hover:border-black dark:hover:border-white transition-all shadow-sm">
                  <div className="mb-2">
                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Target</p>
                      <div className="flex justify-center flex-wrap gap-0.5 font-mono text-2xl font-black tracking-widest">
                         {targetChars.map((char, i) => {
                             const spokenChar = spokenClean[i];
                             const isMatch = spokenChar && spokenChar.toLowerCase() === char.toLowerCase();
-                            
                             let className = "text-green-500"; 
-                            if (!spokenChar) {
-                                className = "text-zinc-300 dark:text-zinc-700 opacity-50"; 
-                            } else if (!isMatch) {
-                                className = "text-red-500"; 
-                            }
-                            
+                            if (!spokenChar) { className = "text-zinc-300 dark:text-zinc-700 opacity-50"; } else if (!isMatch) { className = "text-red-500"; }
                             return <span key={i} className={className}>{char}</span>;
                         })}
                      </div>
                  </div>
-
                  {!isPerfect && (
                      <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
                         <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Duyulan</p>
@@ -416,9 +437,7 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
                  )}
              </div>
              <div className="text-center">
-                 <span className={`text-2xl font-black ${isPerfect ? 'text-green-600 dark:text-green-400' : 'text-orange-500'}`}>
-                    {pronunciationScore}%
-                 </span>
+                 <span className={`text-2xl font-black ${isPerfect ? 'text-green-600 dark:text-green-400' : 'text-orange-500'}`}>{pronunciationScore}%</span>
                  <span className="text-[10px] block font-bold uppercase text-zinc-400 tracking-wider">Doğruluk</span>
              </div>
           </div>
@@ -440,9 +459,15 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
 
   const renderHeader = () => (
     <div className="flex justify-between items-center w-full px-1 z-10 shrink-0 mb-4">
-       <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${phase.bg} ${phase.text}`}>
+       {/* Mode Switcher */}
+       <button 
+            onClick={() => onChangeMode && setShowModeMenu(!showModeMenu)}
+            className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-transform active:scale-95 border ${phase.bg} ${phase.text} border-transparent hover:border-current/20`}
+       >
+            <span className="text-sm">{phase.icon}</span>
             {phase.label}
-       </div>
+            {onChangeMode && <ChevronDown size={12} className="opacity-70 ml-1" />}
+       </button>
        
        <div className="flex items-center gap-2">
             <span className="text-[10px] font-black text-zinc-300 dark:text-zinc-700 uppercase tracking-widest px-2 py-0.5 border border-zinc-100 dark:border-zinc-800 rounded-full">{word.type}</span>
@@ -920,6 +945,9 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
            {renderQuestion()}
            {renderInputArea()}
        </div>
+
+       {/* Mode Menu Overlay */}
+       {renderModeMenu()}
 
        {/* Answer Overlay */}
        {showAnswer && renderAnswer()}

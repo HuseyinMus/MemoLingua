@@ -56,33 +56,25 @@ const safeStringify = (obj: any) => {
 };
 
 const deepSanitize = (obj: any, seen = new WeakSet()): any => {
-    // 1. Pass through primitives and null
     if (obj === null || typeof obj !== 'object') {
         return obj === undefined ? null : obj;
     }
     
-    // 2. Break circular references
     if (seen.has(obj)) return null;
     seen.add(obj);
 
-    // 3. Handle Arrays
     if (Array.isArray(obj)) {
         return obj.map(item => deepSanitize(item, seen));
     }
     
-    // 4. Strict POJO check
-    // This rejects Firestore types, DOM elements, Date objects, etc.
-    // Only allows objects created via {} or new Object()
     const proto = Object.getPrototypeOf(obj);
     if (proto !== null && proto !== Object.prototype) {
         return null;
     }
 
-    // 5. Reconstruct the object with sanitized values
     const result: any = {};
     for (const key of Object.keys(obj)) {
         const value = obj[key];
-        // Skip functions, symbols, and undefined
         if (value !== undefined && typeof value !== 'function' && typeof value !== 'symbol') {
             result[key] = deepSanitize(value, seen);
         }
@@ -93,7 +85,6 @@ const deepSanitize = (obj: any, seen = new WeakSet()): any => {
 const cleanProfile = (data: any): UserProfile => {
     if (!data) throw new Error("Profile data is missing");
     
-    // Explicitly map quests to new plain objects to strip any Firestore/internal refs
     const quests = Array.isArray(data.quests) ? data.quests.map((q: any) => ({
         id: String(q.id || ''),
         title: String(q.title || ''),
@@ -157,7 +148,6 @@ const cleanWord = (data: any): UserWord => {
     if (data.audioBase64) word.audioBase64 = String(data.audioBase64);
     if (data.mnemonic) word.mnemonic = String(data.mnemonic);
     
-    // Explicitly map history to plain objects to avoid refs
     if (Array.isArray(data.history)) {
         word.history = data.history.map((h: any) => ({
              date: Number(h.date) || Date.now(),
@@ -249,19 +239,16 @@ export default function App() {
   const [sessionCount, setSessionCount] = useState(0); 
   const [initialSessionSize, setInitialSessionSize] = useState(0);
   const [overrideMode, setOverrideMode] = useState<StudyMode | 'auto'>('auto');
-  const [showModeMenu, setShowModeMenu] = useState(false);
   const [sessionResults, setSessionResults] = useState<SessionResult[]>([]);
   
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
   const [showAutoGenNotification, setShowAutoGenNotification] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   
-  // Audio Player State
   const [showAudioPlayer, setShowAudioPlayer] = useState(false);
   const [audioPlayerCurrentIndex, setAudioPlayerCurrentIndex] = useState(0);
   const [isAudioPlayerPlaying, setIsAudioPlayerPlaying] = useState(false);
 
-  // Phrasal Verb Mode
   const [phrasalVerbMode, setPhrasalVerbMode] = useState<'informal' | 'formal'>('informal');
 
   const lastAutoGenerationRef = useRef<string | null>(null);
@@ -292,7 +279,6 @@ export default function App() {
     let unsubscribeWords: () => void;
     let isMounted = true;
     
-    // Initial Load from Cache for Speed
     const cachedWords = localStorage.getItem(WORDS_STORAGE_KEY);
     if (cachedWords) {
         try {
@@ -318,7 +304,6 @@ export default function App() {
                     const today = new Date().toDateString();
                     const isNewDay = profileData.lastStudyDate !== today;
                     
-                    // Reset quests if new day
                     let currentQuests = profileData.quests || DAILY_QUESTS_TEMPLATE;
                     if (profileData.lastQuestDate !== today) {
                         currentQuests = DAILY_QUESTS_TEMPLATE.map(q => ({ ...q, progress: 0, completed: false }));
@@ -473,7 +458,6 @@ export default function App() {
     }
   }, [stories]);
 
-  // Sync Words to Local Storage whenever they change
   useEffect(() => {
       if (words.length > 0) {
           try {
@@ -505,7 +489,6 @@ export default function App() {
       };
   }, []);
   
-  // Audio Player Logic
   useEffect(() => {
     let audioTimeout: any;
     
@@ -514,25 +497,19 @@ export default function App() {
         
         const word = words[audioPlayerCurrentIndex];
         
-        // 1. Speak Term (English)
         await playWordAudio(word);
         
-        // 2. Pause
         await new Promise(r => audioTimeout = setTimeout(r, 1000));
         
-        // 3. Speak Translation (Turkish - Browser TTS fallback usually better for TR)
         const trUtterance = new SpeechSynthesisUtterance(word.translation);
         trUtterance.lang = 'tr-TR';
         window.speechSynthesis.speak(trUtterance);
         
-        // Wait for TR speech to end approximately or use event
         await new Promise(r => {
              trUtterance.onend = r;
-             // Safety timeout in case onend doesn't fire
              setTimeout(r, 3000); 
         });
 
-        // 4. Pause before next
         await new Promise(r => audioTimeout = setTimeout(r, 1500));
         
         if (isAudioPlayerPlaying) {
@@ -574,7 +551,6 @@ export default function App() {
     if (view === AppView.DASHBOARD) {
         setInitialSessionSize(0);
         setSessionCount(0);
-        setShowModeMenu(false);
         setOverrideMode('auto');
         setSessionResults([]);
     }
@@ -607,11 +583,10 @@ export default function App() {
   };
 
   const saveWordsBatch = async (newWords: UserWord[]) => {
-      // Optimistic Update: Update local state immediately
       setWords(prev => {
-          const wordMap = new Map(prev.map(w => [w.id, w]));
+          const wordMap = new Map(prev.map(w => [w.id, w] as [string, UserWord]));
           newWords.forEach(w => wordMap.set(w.id, w));
-          const updated = Array.from(wordMap.values()).sort((a, b) => b.dateAdded - a.dateAdded);
+          const updated = Array.from(wordMap.values()).sort((a: UserWord, b: UserWord) => b.dateAdded - a.dateAdded);
           return updated;
       });
 
@@ -627,7 +602,6 @@ export default function App() {
   };
   
   const updateWordInDb = async (word: UserWord) => {
-      // Optimistic Update
       setWords(prev => prev.map(w => w.id === word.id ? cleanWord(word) : w));
 
       const user = auth.currentUser;
@@ -662,7 +636,6 @@ export default function App() {
   
   const handleAddXP = (amount: number) => { updateDailyProgress(0, amount); };
   
-  // Quest Logic
   const handleQuestProgress = (type: Quest['type'], amount: number = 1) => {
       if (!userProfile) return;
       
@@ -672,7 +645,6 @@ export default function App() {
               const isCompleted = newProgress >= q.target;
               if (isCompleted) {
                    handleAddXP(q.rewardXP);
-                   // Show mini notification?
               }
               return { ...q, progress: newProgress, completed: isCompleted };
           }
@@ -833,9 +805,8 @@ export default function App() {
       if (!userProfile || isGenerating) return;
       setIsGenerating(true);
       try {
-          const targetCount = 5; // Generate 5 words for specific topics
+          const targetCount = 5; 
           const existingTerms = words.map(w => w.term);
-          // Use the topic as the goal
           const newBatch = await generateDailyBatch(targetCount, userProfile.level, topic as UserGoal, existingTerms);
           
           const newWords: UserWord[] = newBatch.map(w => ({
@@ -846,7 +817,6 @@ export default function App() {
           
           await saveWordsBatch(newWords);
           
-          // Generate audio in background
           newWords.forEach(async (word) => {
               try {
                   const audio = await generateAudio(word.term);
@@ -901,7 +871,6 @@ export default function App() {
       try {
           const newWordData = await generateSingleWord(searchTerm, userProfile.level);
           
-          // DIRECT ADD WITHOUT MODAL
           const newWord: UserWord = {
               ...newWordData,
               id: crypto.randomUUID(),
@@ -915,7 +884,7 @@ export default function App() {
               if (audio) updateWordInDb({ ...newWord, audioBase64: audio });
           });
           
-          handleQuestProgress('add_words'); // Update Quest
+          handleQuestProgress('add_words'); 
           setSearchTerm('');
           alert(`${newWord.term} başarıyla eklendi!`);
       } catch (e) {
@@ -941,16 +910,13 @@ export default function App() {
             };
             await saveWordsBatch([newWord]);
             generateAudio(newWord.term).then(audio => { if(audio) updateWordInDb({...newWord, audioBase64: audio}) });
-            setPreviewWord(newWord); // Show the card for the surprise word
+            setPreviewWord(newWord); 
         }
     } catch(e) { console.error(e); alert('Sürpriz yapılamadı :('); } finally { setIsSearching(false); }
   };
 
   const handleAddPreviewWord = async () => {
       if (!previewWord) return;
-      // Already added in manual search logic, this is just for closing or confirming in other contexts
-      // If we use handleSurpriseWord, it adds it then sets preview.
-      // So here we just close.
       setPreviewWord(null);
   };
 
@@ -969,7 +935,7 @@ export default function App() {
         setStories(updatedStories);
         setActiveStory(newStory);
         setCurrentStoryPage(0);
-        handleQuestProgress('read_story'); // Update Quest
+        handleQuestProgress('read_story'); 
     } catch (e) {
         console.error(e);
         alert("Hikaye oluşturulamadı. Lütfen tekrar dene.");
@@ -1014,7 +980,7 @@ export default function App() {
       setSessionResults(prev => [...prev, { wordId: word.id, term: word.term, isCorrect: grade !== 'again', grade }]);
       setSessionCount(prev => prev + 1);
       
-      handleQuestProgress('study_words'); // Update Quest
+      handleQuestProgress('study_words'); 
 
       if (grade !== 'again') {
          let xp = grade === 'easy' ? 10 : grade === 'good' ? 5 : 2;
@@ -1058,7 +1024,7 @@ export default function App() {
            generateAudio(newWord.term).then(audio => {
               if (audio) updateWordInDb({ ...newWord, audioBase64: audio });
            });
-           handleQuestProgress('add_words'); // Update Quest
+           handleQuestProgress('add_words'); 
            setSelectedWordForAdd(null);
       } catch (e) { console.error(e); } finally { setIsLookupLoading(false); }
   };
@@ -1222,35 +1188,8 @@ export default function App() {
                        <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Oturum</span>
                        <span className="font-bold text-black dark:text-white">{sessionCount + 1} / {initialSessionSize}</span>
                    </div>
-                   <button onClick={() => setShowModeMenu(!showModeMenu)} className={`p-2 rounded-full transition-colors ${showModeMenu ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}><MoreHorizontal size={24} className="text-black dark:text-white" /></button>
+                   <div className="w-10"></div> 
               </header>
-  
-              {/* Menu Dropdown */}
-              {showModeMenu && (
-                  <>
-                      <div className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]" onClick={() => setShowModeMenu(false)}></div>
-                      <div className="absolute top-20 right-6 z-50 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-2 min-w-[180px] animate-fade-in origin-top-right">
-                          <p className="px-3 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-widest border-b border-zinc-100 dark:border-zinc-800 mb-1">Çalışma Modu</p>
-                          {[
-                              { id: 'auto', label: 'Otomatik (AI)', icon: '✨' },
-                              { id: 'meaning', label: 'Anlam', icon: '👀' },
-                              { id: 'context', label: 'Bağlam', icon: '📝' },
-                              { id: 'writing', label: 'Yazma', icon: '⌨️' },
-                              { id: 'speaking', label: 'Konuşma', icon: '🎙️' },
-                              { id: 'translation', label: 'Çeviri', icon: '🇹🇷' },
-                          ].map(m => (
-                              <button
-                                  key={m.id}
-                                  onClick={() => { setOverrideMode(m.id as any); setShowModeMenu(false); }}
-                                  className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-3 transition-colors ${overrideMode === m.id ? 'bg-black dark:bg-white text-white dark:text-black' : 'hover:bg-zinc-5 dark:hover:bg-zinc-800 text-black dark:text-white'}`}
-                              >
-                                  <span className="text-base">{m.icon}</span>
-                                  {m.label}
-                              </button>
-                          ))}
-                      </div>
-                  </>
-              )}
   
               <div className="flex-1 px-4 pb-4 overflow-hidden relative z-0">
                   <StudyCard 
@@ -1260,6 +1199,7 @@ export default function App() {
                       onResult={handleStudyResult}
                       nextIntervals={getNextIntervals(currentWord)}
                       onUpdateSRS={(newSRS) => handleUpdateSRS(currentWord.id, newSRS)}
+                      onChangeMode={(newMode) => setOverrideMode(newMode)}
                   />
               </div>
           </div>
@@ -1406,7 +1346,7 @@ export default function App() {
         </div>
     );
   }
-  
+
   function renderDashboard() {
     const hours = new Date().getHours();
     const greeting = hours < 12 ? 'Günaydın' : hours < 18 ? 'Tünaydın' : 'İyi Akşamlar';
@@ -1440,7 +1380,6 @@ export default function App() {
                 </div>
              </div>
              
-             {/* Quests Widget */}
              <div className="bg-white dark:bg-zinc-900 p-5 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-sm">
                  <h3 className="text-sm font-bold text-black dark:text-white mb-3 flex items-center gap-2"><CheckCircle2 size={16} className="text-blue-500" /> Günlük Görevler</h3>
                  <div className="space-y-3">
@@ -1550,7 +1489,6 @@ export default function App() {
 
               <div className="flex-1 overflow-y-auto scrollbar-hide px-6 space-y-8">
                   
-                  {/* SEARCH BAR (Stickyish) */}
                   <div className="sticky top-0 z-20 py-2 bg-zinc-50/80 dark:bg-black/80 backdrop-blur-md -mx-2 px-2">
                        <div className="bg-white dark:bg-zinc-900 p-2 rounded-[2rem] shadow-lg border border-zinc-100 dark:border-zinc-800 flex items-center transition-all focus-within:ring-2 focus-within:ring-black dark:focus-within:ring-white">
                           <input 
@@ -1571,7 +1509,6 @@ export default function App() {
                       </div>
                   </div>
 
-                  {/* HERO: MAGIC GENERATOR */}
                   <div>
                       <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 ml-1">Sana Özel</h3>
                       <button 
@@ -1592,7 +1529,6 @@ export default function App() {
                       </button>
                   </div>
 
-                  {/* SURPRISE ME */}
                    <div>
                       <button 
                           onClick={handleSurpriseWord}
@@ -1612,7 +1548,6 @@ export default function App() {
                       </button>
                   </div>
 
-                  {/* PHRASAL VERBS SECTION */}
                   <div className="bg-zinc-100 dark:bg-zinc-900/50 p-5 rounded-[2.5rem]">
                       <div className="flex justify-between items-center mb-4 px-1">
                           <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Link2 size={12} /> Phrasal Verbs</h3>
@@ -1653,7 +1588,6 @@ export default function App() {
                       </p>
                   </div>
 
-                  {/* TOPIC GRID */}
                   <div>
                       <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 ml-1">Koleksiyonlar</h3>
                       <div className="grid grid-cols-2 gap-3">
@@ -1741,7 +1675,6 @@ export default function App() {
                   </div>
               </div>
 
-              {/* Streak Freeze Shop */}
               <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-6 rounded-[2rem] text-white shadow-lg mb-6 relative overflow-hidden">
                   <Snowflake size={100} className="absolute -right-6 -bottom-6 opacity-20" />
                   <div className="relative z-10 flex justify-between items-center">
@@ -1827,34 +1760,74 @@ export default function App() {
           </div>
       );
   }
-
+  
   if (loadingAuth) {
-    return <div className="h-full w-full flex items-center justify-center bg-white dark:bg-black"><Loader2 className="animate-spin text-black dark:text-white" size={48} /></div>;
+    return (
+        <div className="h-full w-full flex items-center justify-center bg-white dark:bg-zinc-950">
+            <Loader2 className="animate-spin text-zinc-400" size={32} />
+        </div>
+    );
   }
-  if (view === AppView.AUTH) return <Auth onLoginSuccess={() => {}} />;
-  if (view === AppView.ONBOARDING) return <Onboarding onComplete={handleOnboardingComplete} />;
 
+  if (view === AppView.AUTH) {
+      return <Auth onLoginSuccess={() => {}} />;
+  }
+
+  if (view === AppView.ONBOARDING) {
+      return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
+  
   return (
-    <div className="h-[100dvh] w-full bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 font-sans overflow-hidden select-none transition-colors duration-300 flex flex-col">
-      {showTour && <Tour steps={[{ targetId: 'nav-dashboard', title: 'Ana Sayfa', description: 'İlerlemeni, günlük hedeflerini ve serini buradan takip et.', position: 'top' }, { targetId: 'action-review', title: 'Tekrar Yap', description: 'Akıllı tekrar sistemi ile kelimeleri unutmadan önce hatırla.', position: 'top' }, { targetId: 'action-discover', title: 'Kelime Ekle', description: 'Yapay zeka ile seviyene uygun yeni kelimeler keşfet.', position: 'top' }, { targetId: 'nav-studio', title: 'Studio', description: 'Hikayeler oku ve yapay zeka ile konuşarak pratik yap.', position: 'top' }, { targetId: 'nav-games', title: 'Arena', description: 'Oyunlar oyna, XP kazan ve ligde yüksel.', position: 'top' }]} onComplete={handleTourComplete} onSkip={handleTourComplete} />}
-      
-      <div className="flex-1 w-full overflow-hidden relative flex flex-col">
-        {view === AppView.DASHBOARD && <div className="h-full w-full overflow-y-auto scrollbar-hide">{renderDashboard()}</div>}
-        {view === AppView.STUDY && renderStudy()}
-        {view === AppView.DISCOVER && <div className="h-full w-full overflow-y-auto scrollbar-hide">{renderDiscover()}</div>}
-        {view === AppView.STUDIO && renderStudio()}
-        {view === AppView.PROFILE && <div className="h-full w-full overflow-y-auto scrollbar-hide">{renderProfile()}</div>}
-        {view === AppView.GAMES && <Games userProfile={userProfile} words={words} onAddXP={(xp) => { handleAddXP(xp); handleQuestProgress('play_games'); }} leaderboardData={leaderboardData} />}
-        {view === AppView.SETTINGS && <Settings userProfile={userProfile} words={words} onUpdateProfile={updateProfile} onBack={() => setView(AppView.PROFILE)} onClearData={handleClearData} onSignOut={handleSignOut} />}
-      </div>
+    <div className="h-[100dvh] w-full bg-zinc-50 dark:bg-zinc-950 text-black dark:text-white font-sans overflow-hidden flex flex-col transition-colors duration-300">
+        
+        <main className="flex-1 w-full overflow-hidden relative">
+            {view === AppView.DASHBOARD && (
+                <div className="h-full w-full overflow-y-auto scrollbar-hide">
+                    {renderDashboard()}
+                </div>
+            )}
+            {view === AppView.STUDY && renderStudy()}
+            {view === AppView.DISCOVER && (
+                <div className="h-full w-full overflow-y-auto scrollbar-hide">
+                    {renderDiscover()}
+                </div>
+            )}
+            {view === AppView.STUDIO && renderStudio()}
+            {view === AppView.PROFILE && (
+                <div className="h-full w-full overflow-y-auto scrollbar-hide">
+                    {renderProfile()}
+                </div>
+            )}
+            {view === AppView.GAMES && (
+                <div className="h-full w-full">
+                    <Games userProfile={userProfile} words={words} onAddXP={handleAddXP} leaderboardData={leaderboardData} />
+                </div>
+            )}
+            {view === AppView.SETTINGS && (
+                <Settings userProfile={userProfile} words={words} onUpdateProfile={updateProfile} onBack={() => setView(AppView.PROFILE)} onClearData={handleClearData} onSignOut={handleSignOut} />
+            )}
+        </main>
+        
+        {/* Navigation is hidden in immersive views */}
+        {view !== AppView.STUDIO && view !== AppView.STUDY && view !== AppView.SETTINGS && !showLibrary && !editingWord && !previewWord && !isKeyboardOpen && !showAudioPlayer && (
+            <Navigation currentView={view} setView={setView} />
+        )}
 
-      {showLibrary && renderLibrary()}
-      {editingWord && renderWordEditor()}
-      {previewWord && renderPreviewModal()}
-      {showAudioPlayer && renderAudioPlayer()}
-      {isGenerating && renderGenerationLoading()}
-      
-      {selectedWordForAdd && (
+        {/* Full Screen Overlays */}
+        {showLibrary && renderLibrary()}
+        {isGenerating && renderGenerationLoading()}
+        {editingWord && renderWordEditor()}
+        {previewWord && renderPreviewModal()}
+        {showAudioPlayer && renderAudioPlayer()}
+        {showTour && <Tour steps={[{ targetId: 'nav-dashboard', title: 'Ana Sayfa', description: 'İlerlemeni, günlük hedeflerini ve serini buradan takip et.', position: 'top' }, { targetId: 'action-review', title: 'Tekrar Yap', description: 'Akıllı tekrar sistemi ile kelimeleri unutmadan önce hatırla.', position: 'top' }, { targetId: 'action-discover', title: 'Kelime Ekle', description: 'Yapay zeka ile seviyene uygun yeni kelimeler keşfet.', position: 'top' }, { targetId: 'nav-studio', title: 'Studio', description: 'Hikayeler oku ve yapay zeka ile konuşarak pratik yap.', position: 'top' }, { targetId: 'nav-games', title: 'Arena', description: 'Oyunlar oyna, XP kazan ve ligde yüksel.', position: 'top' }]} onComplete={handleTourComplete} onSkip={handleTourComplete} />}
+        {showAutoGenNotification && (
+             <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-black dark:bg-white text-white dark:text-black px-6 py-3 rounded-full shadow-xl flex items-center gap-3 animate-slide-up z-[110]">
+                 <Sparkles size={18} className="text-yellow-400" />
+                 <span className="font-bold text-sm">Yeni kelimeler hazır!</span>
+             </div>
+        )}
+        
+        {selectedWordForAdd && (
           <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
               <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-slide-up border border-zinc-100 dark:border-zinc-800 text-center">
                   <h3 className="text-xl font-bold mb-2 text-black dark:text-white">Kelime Bulundu!</h3>
@@ -1865,14 +1838,7 @@ export default function App() {
                   </div>
               </div>
           </div>
-      )}
-      {showAutoGenNotification && (
-          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[80] bg-black/80 dark:bg-white/90 backdrop-blur-md text-white dark:text-black px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 animate-slide-up"><Sparkles className="text-yellow-400 dark:text-yellow-600" size={20} fill="currentColor" /><div className="flex flex-col"><span className="text-xs font-bold uppercase tracking-widest opacity-80">MemoLingua AI</span><span className="font-bold text-sm">Günlük kelimelerin hazır!</span></div></div>
-      )}
-
-      {view !== AppView.STUDIO && view !== AppView.STUDY && view !== AppView.SETTINGS && !showLibrary && !editingWord && !previewWord && !isKeyboardOpen && !showAudioPlayer && (
-          <Navigation currentView={view} setView={setView} />
-      )}
+        )}
     </div>
   );
 }
