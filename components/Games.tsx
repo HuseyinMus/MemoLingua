@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Trophy, Gamepad2, X, Ghost, BrainCircuit, Grid, ArrowLeft, RotateCcw, Grid3x3, Shuffle, Sparkles, Check, Play, Timer, Lightbulb, FastForward, HelpCircle } from 'lucide-react';
+import { Trophy, Gamepad2, X, Ghost, BrainCircuit, Grid, ArrowLeft, RotateCcw, Grid3x3, Shuffle, Sparkles, Check, Play, Timer, Lightbulb, FastForward, HelpCircle, Zap, Headphones, Volume2, Clock } from 'lucide-react';
 import { LeaderboardEntry, UserProfile, UserWord } from '../types';
 
 interface GamesProps {
@@ -174,7 +174,7 @@ const useMemory = (words: UserWord[], onEnd: (score: number) => void) => {
     const [gameStarted, setGameStarted] = useState(false);
 
     const init = useCallback(() => {
-        const list = words.length >= 6 ? words : [...words, ...words, ...words].slice(0, 6); 
+        const list = words.length >= 6 ? words : [...words, ...words, ...words, ...words].slice(0, 6); 
         const selectedWords = list.sort(() => 0.5 - Math.random()).slice(0, 6);
         
         const generatedCards: MemoryCard[] = [];
@@ -322,10 +322,134 @@ const useScramble = (words: UserWord[], onEnd: (score: number) => void) => {
     return { currentWord, scrambled, input, setInput, check, score, feedback, nextWord, streak, hintRevealed, useHint };
 };
 
+// 5. SPEED QUIZ LOGIC (Hızlı Cevap)
+const useSpeedQuiz = (words: UserWord[], onEnd: (score: number) => void) => {
+    const [currentWord, setCurrentWord] = useState<UserWord | null>(null);
+    const [options, setOptions] = useState<UserWord[]>([]);
+    const [score, setScore] = useState(0);
+    const [timeLeft, setTimeLeft] = useState(30);
+    const [isGameOver, setIsGameOver] = useState(false);
+    const [gameState, setGameState] = useState<'playing' | 'idle'>('idle');
+
+    const generateQuestion = useCallback(() => {
+        if (words.length < 4) {
+            // Need at least 4 words
+            setIsGameOver(true);
+            return;
+        }
+        const target = words[Math.floor(Math.random() * words.length)];
+        const distractors = words.filter(w => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, 3);
+        const allOptions = [target, ...distractors].sort(() => 0.5 - Math.random());
+        
+        setCurrentWord(target);
+        setOptions(allOptions);
+    }, [words]);
+
+    const init = useCallback(() => {
+        setScore(0);
+        setTimeLeft(30);
+        setIsGameOver(false);
+        setGameState('playing');
+        generateQuestion();
+    }, [generateQuestion]);
+
+    const handleAnswer = (selectedId: string) => {
+        if (!currentWord || isGameOver) return;
+        
+        if (selectedId === currentWord.id) {
+            setScore(s => s + 10);
+            setTimeLeft(t => Math.min(30, t + 2)); // Bonus time
+            generateQuestion();
+        } else {
+            setTimeLeft(t => Math.max(0, t - 5)); // Penalty
+            // Visual feedback could be added here
+        }
+    };
+
+    useEffect(() => {
+        if (gameState !== 'playing') return;
+        const timer = setInterval(() => {
+            setTimeLeft(prev => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    setIsGameOver(true);
+                    onEnd(score);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [gameState, onEnd, score]);
+
+    useEffect(() => { init(); }, [init]);
+
+    return { currentWord, options, score, timeLeft, isGameOver, handleAnswer, init };
+};
+
+// 6. AUDIO CHALLENGE LOGIC (Dinleme Testi)
+const useAudioQuiz = (words: UserWord[], onEnd: (score: number) => void) => {
+    const [currentWord, setCurrentWord] = useState<UserWord | null>(null);
+    const [options, setOptions] = useState<UserWord[]>([]);
+    const [score, setScore] = useState(0);
+    const [lives, setLives] = useState(3);
+    const [isGameOver, setIsGameOver] = useState(false);
+    
+    const generateQuestion = useCallback(() => {
+        if (words.length < 4) return;
+        const target = words[Math.floor(Math.random() * words.length)];
+        const distractors = words.filter(w => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, 3);
+        const allOptions = [target, ...distractors].sort(() => 0.5 - Math.random());
+        
+        setCurrentWord(target);
+        setOptions(allOptions);
+        
+        // Auto play audio
+        setTimeout(() => playAudio(target.term), 500);
+    }, [words]);
+
+    const init = useCallback(() => {
+        setScore(0);
+        setLives(3);
+        setIsGameOver(false);
+        generateQuestion();
+    }, [generateQuestion]);
+
+    const playAudio = (text: string) => {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.9;
+        window.speechSynthesis.speak(utterance);
+    };
+
+    const handleAnswer = (selectedId: string) => {
+        if (!currentWord || isGameOver) return;
+
+        if (selectedId === currentWord.id) {
+            setScore(s => s + 10);
+            generateQuestion();
+        } else {
+            setLives(l => {
+                const newLives = l - 1;
+                if (newLives <= 0) {
+                    setIsGameOver(true);
+                    onEnd(score);
+                }
+                return newLives;
+            });
+        }
+    };
+
+    useEffect(() => { init(); }, [init]);
+
+    return { currentWord, options, score, lives, isGameOver, handleAnswer, playAudio, init };
+};
+
 
 export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leaderboardData }) => {
     const [activeTab, setActiveTab] = useState<'menu' | 'leaderboard'>('menu');
-    const [activeGame, setActiveGame] = useState<'none' | 'hangman' | 'snake' | 'memory' | 'scramble'>('none');
+    const [activeGame, setActiveGame] = useState<'none' | 'hangman' | 'snake' | 'memory' | 'scramble' | 'speed' | 'audio'>('none');
     
     // --- HANGMAN RENDER ---
     const HangmanGame = () => {
@@ -581,6 +705,93 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
         )
     }
 
+    // --- SPEED QUIZ RENDER ---
+    const SpeedQuizGame = () => {
+        const { currentWord, options, score, timeLeft, isGameOver, handleAnswer, init } = useSpeedQuiz(words, (s) => onAddXP(s));
+
+        return (
+            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in relative max-w-sm mx-auto">
+                <button onClick={() => { onAddXP(score); setActiveGame('none'); }} className="absolute top-4 left-4 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full"><ArrowLeft size={20} className="text-black dark:text-white"/></button>
+                
+                <div className="flex justify-between items-center w-full mb-8 px-2">
+                    <div className="flex items-center gap-2 bg-orange-100 dark:bg-orange-900/30 px-4 py-2 rounded-full text-orange-600 dark:text-orange-400 font-bold">
+                        <Clock size={16} /> {timeLeft}s
+                    </div>
+                    <div className="text-2xl font-black text-black dark:text-white">{score}</div>
+                </div>
+
+                {isGameOver ? (
+                    <GameOverModal title="Süre Bitti" score={score} xp={score} onRestart={init} onExit={() => setActiveGame('none')} />
+                ) : (
+                    <div className="w-full">
+                        <div className="text-center mb-10">
+                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Bu kelimenin anlamı ne?</p>
+                            <h2 className="text-4xl font-black text-black dark:text-white tracking-tighter">{currentWord?.term}</h2>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
+                            {options.map((opt) => (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => handleAnswer(opt.id)}
+                                    className="w-full py-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-lg font-bold text-zinc-700 dark:text-zinc-200 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-95 transition-all"
+                                >
+                                    {opt.translation}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // --- AUDIO CHALLENGE RENDER ---
+    const AudioQuizGame = () => {
+        const { currentWord, options, score, lives, isGameOver, handleAnswer, playAudio, init } = useAudioQuiz(words, (s) => onAddXP(s));
+
+        return (
+            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in relative max-w-sm mx-auto">
+                <button onClick={() => { onAddXP(score); setActiveGame('none'); }} className="absolute top-4 left-4 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full"><ArrowLeft size={20} className="text-black dark:text-white"/></button>
+                
+                <div className="flex justify-between items-center w-full mb-8 px-2">
+                    <div className="flex gap-1">
+                        {[...Array(3)].map((_, i) => (
+                            <div key={i} className={`w-3 h-3 rounded-full ${i < lives ? 'bg-red-500' : 'bg-zinc-200 dark:bg-zinc-800'}`} />
+                        ))}
+                    </div>
+                    <div className="text-2xl font-black text-black dark:text-white">{score}</div>
+                </div>
+
+                {isGameOver ? (
+                    <GameOverModal title="Oyun Bitti" score={score} xp={score} onRestart={init} onExit={() => setActiveGame('none')} />
+                ) : (
+                    <div className="w-full text-center">
+                        <button 
+                            onClick={() => currentWord && playAudio(currentWord.term)}
+                            className="w-32 h-32 rounded-full bg-blue-500 text-white flex items-center justify-center mx-auto mb-10 shadow-xl shadow-blue-500/30 hover:scale-105 active:scale-95 transition-all"
+                        >
+                            <Volume2 size={48} />
+                        </button>
+                        
+                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-6">Duyduğun kelimeyi seç</p>
+
+                        <div className="grid grid-cols-1 gap-3">
+                            {options.map((opt) => (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => handleAnswer(opt.id)}
+                                    className="w-full py-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-lg font-bold text-zinc-700 dark:text-zinc-200 shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 hover:scale-[1.02] active:scale-95 transition-all"
+                                >
+                                    {opt.translation}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     // --- LEADERBOARD RENDER ---
     if (activeTab === 'leaderboard') {
         return (
@@ -616,6 +827,8 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
         if (activeGame === 'snake') return <SnakeGame />;
         if (activeGame === 'memory') return <MemoryGame />;
         if (activeGame === 'scramble') return <ScrambleGame />;
+        if (activeGame === 'speed') return <SpeedQuizGame />;
+        if (activeGame === 'audio') return <AudioQuizGame />;
         return null;
     }
 
@@ -696,6 +909,38 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                         </div>
                         <h3 className="text-2xl font-bold text-black dark:text-white mb-1">Kelime Karıştırma</h3>
                         <p className="text-zinc-500 text-sm font-medium">Karışık harfleri düzelt, doğruyu bul.</p>
+                    </div>
+                </button>
+
+                <button 
+                    onClick={() => setActiveGame('speed')}
+                    className="relative overflow-hidden group bg-gradient-to-br from-yellow-400 to-orange-500 p-6 rounded-[2.5rem] text-left shadow-lg hover:shadow-yellow-500/30 transition-all"
+                >
+                    <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:scale-110 transition-transform duration-500">
+                        <Zap size={120} className="text-white" />
+                    </div>
+                    <div className="relative z-10">
+                        <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white mb-4 border border-white/30">
+                            <Zap size={24} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-white mb-1">Hızlı Cevap</h3>
+                        <p className="text-yellow-100 text-sm font-medium">Zamana karşı yarış, doğruyu seç.</p>
+                    </div>
+                </button>
+
+                <button 
+                    onClick={() => setActiveGame('audio')}
+                    className="relative overflow-hidden group bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] text-left border border-zinc-200 dark:border-zinc-800 shadow-sm hover:shadow-xl transition-all"
+                >
+                    <div className="absolute top-0 right-0 p-6 opacity-10 rotate-12 group-hover:rotate-0 transition-transform duration-500">
+                        <Headphones size={120} className="text-black dark:text-white" />
+                    </div>
+                    <div className="relative z-10">
+                        <div className="w-12 h-12 bg-purple-500 rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg">
+                            <Headphones size={24} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-black dark:text-white mb-1">Dinleme Testi</h3>
+                        <p className="text-zinc-500 text-sm font-medium">Kelimeyi dinle ve doğruyu bul.</p>
                     </div>
                 </button>
             </div>

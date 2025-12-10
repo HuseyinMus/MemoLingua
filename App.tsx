@@ -1,6 +1,5 @@
-// ... existing imports
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { UserWord, AppView, SRSState, UserProfile, StudyMode, UserLevel, UserGoal, GeneratedStory, Achievement, LeaderboardEntry, WordData, ChatMessage, ChatScenario, SRSHistoryItem } from './types';
+import { UserWord, AppView, SRSState, UserProfile, StudyMode, UserLevel, UserGoal, GeneratedStory, Achievement, LeaderboardEntry, WordData, ChatMessage, ChatScenario, SRSHistoryItem, Quest } from './types';
 import { generateDailyBatch, generateAudio, playGeminiAudio, generateContextualStory, generateSingleWord, generateRoleplayResponse } from './services/geminiService';
 import { auth, db } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -15,12 +14,17 @@ import { Auth } from './components/Auth';
 import { Tour } from './components/Tour';
 import { AdBanner } from './components/AdBanner';
 
-import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Lock, Plus, BookMarked, PieChart, TrendingUp, Activity } from 'lucide-react';
-// ... existing constants
+import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Lock, Plus, BookMarked, PieChart, TrendingUp, Activity, Headphones, Pause, SkipForward, SkipBack, Gift, Wand2, Compass, Cpu, Palette, HeartPulse, Leaf, Briefcase, Plane, GraduationCap } from 'lucide-react';
 
-// ... existing helper functions (deepSanitize, safeStringify, cleanProfile, cleanWord, etc.)
 const PROFILE_STORAGE_KEY = 'memolingua_profile_v1';
 const STORY_STORAGE_KEY = 'memolingua_stories_v1';
+
+// Daily Quests Definition
+const DAILY_QUESTS_TEMPLATE: Quest[] = [
+    { id: 'q1', title: 'Kelime Çalış', icon: '📚', target: 10, progress: 0, completed: false, rewardXP: 20, type: 'study_words' },
+    { id: 'q2', title: 'Oyun Oyna', icon: '🎮', target: 1, progress: 0, completed: false, rewardXP: 15, type: 'play_games' },
+    { id: 'q3', title: 'Hikaye Oku', icon: '📖', target: 1, progress: 0, completed: false, rewardXP: 25, type: 'read_story' },
+];
 
 interface SessionResult {
     wordId: string;
@@ -29,43 +33,59 @@ interface SessionResult {
     grade: string;
 }
 
-function deepSanitize<T>(obj: T, seen = new WeakSet()): T {
+const safeStringify = (obj: any) => {
+    const cache = new WeakSet();
+    try {
+        return JSON.stringify(obj, (key, value) => {
+            if (typeof value === 'object' && value !== null) {
+                if (cache.has(value)) {
+                    return;
+                }
+                cache.add(value);
+            }
+            return value;
+        });
+    } catch (e) {
+        console.error("SafeStringify failed", e);
+        return "{}";
+    }
+};
+
+const deepSanitize = (obj: any, seen = new WeakSet()): any => {
     if (obj === null || typeof obj !== 'object') {
-        return obj;
+        return obj === undefined ? null : obj;
     }
-    
-    if (seen.has(obj)) {
-        return '[Circular]' as any;
-    }
-    
+    if (seen.has(obj)) return null;
     seen.add(obj);
 
     if (Array.isArray(obj)) {
-        return obj.map(item => deepSanitize(item, seen)) as any;
+        return obj.map(item => deepSanitize(item, seen));
     }
-
-    const cleaned: any = {};
-    for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            if (key.startsWith('_') || key === 'delegate' || key === 'auth' || key === 'proactiveRefresh') continue;
-            cleaned[key] = deepSanitize((obj as any)[key], seen);
+    const result: any = {};
+    for (const key of Object.keys(obj)) {
+        const value = obj[key];
+        if (value !== undefined) {
+            result[key] = deepSanitize(value, seen);
         }
     }
-    return cleaned;
-}
-
-const safeStringify = (obj: any) => {
-    try {
-        return JSON.stringify(deepSanitize(obj));
-    } catch (e) {
-        console.error("Stringify failed", e);
-        return "{}";
-    }
+    return result;
 };
 
 const cleanProfile = (data: any): UserProfile => {
     if (!data) throw new Error("Profile data is missing");
     
+    // Explicitly map quests to new plain objects to strip any Firestore/internal refs
+    const quests = Array.isArray(data.quests) ? data.quests.map((q: any) => ({
+        id: String(q.id || ''),
+        title: String(q.title || ''),
+        icon: String(q.icon || '❓'),
+        target: Number(q.target) || 1,
+        progress: Number(q.progress) || 0,
+        completed: !!q.completed,
+        rewardXP: Number(q.rewardXP) || 0,
+        type: String(q.type || 'study_words') as any
+    })) : DAILY_QUESTS_TEMPLATE;
+
     return {
         email: String(data.email || ''),
         username: String(data.username || 'Student'),
@@ -86,6 +106,8 @@ const cleanProfile = (data: any): UserProfile => {
         league: (data.league || 'Bronze') as any,
         theme: (data.theme || 'system') as any,
         uid: data.uid ? String(data.uid) : undefined,
+        quests: quests,
+        lastQuestDate: String(data.lastQuestDate || new Date().toDateString()),
         settings: {
             autoPlayAudio: !!(data.settings?.autoPlayAudio ?? true),
             notifications: !!(data.settings?.notifications ?? true),
@@ -115,7 +137,15 @@ const cleanWord = (data: any): UserWord => {
 
     if (data.audioBase64) word.audioBase64 = String(data.audioBase64);
     if (data.mnemonic) word.mnemonic = String(data.mnemonic);
-    if (Array.isArray(data.history)) word.history = data.history;
+    
+    // Explicitly map history to plain objects
+    if (Array.isArray(data.history)) {
+        word.history = data.history.map((h: any) => ({
+             date: Number(h.date) || Date.now(),
+             grade: String(h.grade || 'good') as any,
+             interval: Number(h.interval) || 0
+        }));
+    }
 
     return word;
 };
@@ -160,7 +190,6 @@ const CHAT_SCENARIOS: ChatScenario[] = [
 ];
 
 export default function App() {
-  // ... existing state definitions
   const [view, setView] = useState<AppView>(AppView.AUTH);
   const [words, setWords] = useState<UserWord[]>([]);
   const [stories, setStories] = useState<GeneratedStory[]>([]);
@@ -207,6 +236,11 @@ export default function App() {
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
   const [showAutoGenNotification, setShowAutoGenNotification] = useState(false);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  
+  // Audio Player State
+  const [showAudioPlayer, setShowAudioPlayer] = useState(false);
+  const [audioPlayerCurrentIndex, setAudioPlayerCurrentIndex] = useState(0);
+  const [isAudioPlayerPlaying, setIsAudioPlayerPlaying] = useState(false);
 
   const lastAutoGenerationRef = useRef<string | null>(null);
 
@@ -232,7 +266,6 @@ export default function App() {
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, isChatTyping]);
 
-  // ... existing useEffects for Auth, Leaderboard, AutoGen, Theme, LocalStorage, Focus ...
   useEffect(() => {
     let unsubscribeWords: () => void;
     let isMounted = true;
@@ -252,10 +285,18 @@ export default function App() {
                     const today = new Date().toDateString();
                     const isNewDay = profileData.lastStudyDate !== today;
                     
+                    // Reset quests if new day
+                    let currentQuests = profileData.quests || DAILY_QUESTS_TEMPLATE;
+                    if (profileData.lastQuestDate !== today) {
+                        currentQuests = DAILY_QUESTS_TEMPLATE.map(q => ({ ...q, progress: 0, completed: false }));
+                    }
+
                     const updatedProfile: UserProfile = {
                         ...profileData,
                         wordsStudiedToday: isNewDay ? 0 : (profileData.wordsStudiedToday || 0),
                         lastStudyDate: today,
+                        lastQuestDate: today,
+                        quests: currentQuests,
                         uid: user.uid,
                         email: user.email || '',
                     };
@@ -421,6 +462,52 @@ export default function App() {
           document.removeEventListener('focusout', handleFocusOut);
       };
   }, []);
+  
+  // Audio Player Logic
+  useEffect(() => {
+    let audioTimeout: any;
+    
+    const playLoop = async () => {
+        if (!isAudioPlayerPlaying || !showAudioPlayer || words.length === 0) return;
+        
+        const word = words[audioPlayerCurrentIndex];
+        
+        // 1. Speak Term (English)
+        await playWordAudio(word);
+        
+        // 2. Pause
+        await new Promise(r => audioTimeout = setTimeout(r, 1000));
+        
+        // 3. Speak Translation (Turkish - Browser TTS fallback usually better for TR)
+        const trUtterance = new SpeechSynthesisUtterance(word.translation);
+        trUtterance.lang = 'tr-TR';
+        window.speechSynthesis.speak(trUtterance);
+        
+        // Wait for TR speech to end approximately or use event
+        await new Promise(r => {
+             trUtterance.onend = r;
+             // Safety timeout in case onend doesn't fire
+             setTimeout(r, 3000); 
+        });
+
+        // 4. Pause before next
+        await new Promise(r => audioTimeout = setTimeout(r, 1500));
+        
+        if (isAudioPlayerPlaying) {
+            setAudioPlayerCurrentIndex(prev => (prev + 1) % words.length);
+        }
+    };
+    
+    if (isAudioPlayerPlaying) {
+        playLoop();
+    }
+    
+    return () => {
+        clearTimeout(audioTimeout);
+        window.speechSynthesis.cancel();
+    };
+  }, [isAudioPlayerPlaying, audioPlayerCurrentIndex, showAudioPlayer]);
+
 
   const dueWords = useMemo(() => {
     const now = Date.now();
@@ -457,7 +544,6 @@ export default function App() {
     }
   }, [view, dueWords.length, weakWords.length, activeStory, studioMode]);
 
-  // ... saveProfile, saveWordsBatch, updateWordInDb, updateDailyProgress ...
   const saveProfile = async (profile: UserProfile) => {
     const sanitizedProfile = deepSanitize(cleanProfile(profile));
     setUserProfile(sanitizedProfile);
@@ -522,6 +608,26 @@ export default function App() {
   };
   
   const handleAddXP = (amount: number) => { updateDailyProgress(0, amount); };
+  
+  // Quest Logic
+  const handleQuestProgress = (type: Quest['type'], amount: number = 1) => {
+      if (!userProfile) return;
+      
+      const updatedQuests = (userProfile.quests || DAILY_QUESTS_TEMPLATE).map(q => {
+          if (q.type === type && !q.completed) {
+              const newProgress = Math.min(q.target, q.progress + amount);
+              const isCompleted = newProgress >= q.target;
+              if (isCompleted) {
+                   handleAddXP(q.rewardXP);
+                   // Show mini notification?
+              }
+              return { ...q, progress: newProgress, completed: isCompleted };
+          }
+          return q;
+      });
+      
+      saveProfile({ ...userProfile, quests: updatedQuests });
+  };
 
   const handleBuyFreeze = () => {
       if (!userProfile) return;
@@ -570,7 +676,6 @@ export default function App() {
       setView(AppView.AUTH);
   };
 
-  // ... getNextIntervals, getStudyModeForWord, playWordAudio, handleGenerateDaily ...
   const getNextIntervals = (word: UserWord) => {
     const { interval } = word.srs;
     if (interval < 1) {
@@ -624,7 +729,7 @@ export default function App() {
           }
       } catch (e) { console.error(e); } finally { setPlayingWordId(null); }
   };
-
+  
   const handleGenerateDaily = async (isAuto: boolean = false) => {
       if (!userProfile) return;
       if (isGenerating) return;
@@ -669,44 +774,98 @@ export default function App() {
       }
   };
 
-  // ... handleManualSearch, handleAddPreviewWord, handleGenerateStory, handleUpdateSRS, handleStudyResult, startScenario, handleSendMessage, handleAddWordFromStory ...
+  const handleGenerateBatchByTopic = async (topic: string) => {
+      if (!userProfile || isGenerating) return;
+      setIsGenerating(true);
+      try {
+          const targetCount = 5; // Generate 5 words for specific topics
+          const existingTerms = words.map(w => w.term);
+          // Use the topic as the goal
+          const newBatch = await generateDailyBatch(targetCount, userProfile.level, topic as UserGoal, existingTerms);
+          
+          const newWords: UserWord[] = newBatch.map(w => ({
+              ...w,
+              dateAdded: Date.now(),
+              srs: { nextReview: Date.now(), interval: 0, easeFactor: 2.5, streak: 0 }
+          }));
+          
+          await saveWordsBatch(newWords);
+          
+          // Generate audio in background
+          newWords.forEach(async (word) => {
+              try {
+                  const audio = await generateAudio(word.term);
+                  if (audio) updateWordInDb({ ...word, audioBase64: audio });
+              } catch(e) {}
+          });
+          
+          handleQuestProgress('add_words', newWords.length);
+          alert(`${topic} ile ilgili ${newWords.length} kelime eklendi!`);
+      } catch (e) {
+          console.error(e);
+          alert("Kelime üretilemedi.");
+      } finally {
+          setIsGenerating(false);
+      }
+  };
+
   const handleManualSearch = async () => {
       if (!searchTerm.trim() || !userProfile) return;
       setIsSearching(true);
       try {
           const newWordData = await generateSingleWord(searchTerm, userProfile.level);
-          setPreviewWord(newWordData);
-          setSearchTerm('');
-      } catch (e) {
-          console.error(e);
-          alert("Kelime bulunamadı. Tekrar deneyin.");
-      } finally { setIsSearching(false); }
-  };
-  
-  const handleAddPreviewWord = async () => {
-      if (!previewWord) return;
-      setIsLookupLoading(true);
-      try {
+          
+          // DIRECT ADD WITHOUT MODAL
           const newWord: UserWord = {
-              ...previewWord,
+              ...newWordData,
               id: crypto.randomUUID(),
               dateAdded: Date.now(),
               srs: { nextReview: Date.now(), interval: 0, easeFactor: 2.5, streak: 0 }
           };
+          
           await saveWordsBatch([newWord]);
           
           generateAudio(newWord.term).then(audio => {
               if (audio) updateWordInDb({ ...newWord, audioBase64: audio });
           });
           
-          setPreviewWord(null);
-          alert(`${newWord.term} başarıyla listene eklendi!`);
+          handleQuestProgress('add_words'); // Update Quest
+          setSearchTerm('');
+          alert(`${newWord.term} başarıyla eklendi!`);
       } catch (e) {
           console.error(e);
-          alert("Eklenirken bir hata oluştu.");
-      } finally {
-          setIsLookupLoading(false);
-      }
+          alert("Kelime bulunamadı. Tekrar deneyin.");
+      } finally { setIsSearching(false); }
+  };
+  
+  const handleSurpriseWord = async () => {
+    if (!userProfile || isSearching) return;
+    setIsSearching(true);
+    try {
+        const topics = ['Technology', 'Nature', 'Space', 'Emotions', 'Science', 'Art'];
+        const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+        const newBatch = await generateDailyBatch(1, userProfile.level, randomTopic as any, words.map(w => w.term));
+        if (newBatch && newBatch.length > 0) {
+            const wordData = newBatch[0];
+            const newWord: UserWord = {
+                ...wordData,
+                id: crypto.randomUUID(),
+                dateAdded: Date.now(),
+                srs: { nextReview: Date.now(), interval: 0, easeFactor: 2.5, streak: 0 }
+            };
+            await saveWordsBatch([newWord]);
+            generateAudio(newWord.term).then(audio => { if(audio) updateWordInDb({...newWord, audioBase64: audio}) });
+            setPreviewWord(newWord); // Show the card for the surprise word
+        }
+    } catch(e) { console.error(e); alert('Sürpriz yapılamadı :('); } finally { setIsSearching(false); }
+  };
+
+  const handleAddPreviewWord = async () => {
+      if (!previewWord) return;
+      // Already added in manual search logic, this is just for closing or confirming in other contexts
+      // If we use handleSurpriseWord, it adds it then sets preview.
+      // So here we just close.
+      setPreviewWord(null);
   };
 
   const handleGenerateStory = async () => {
@@ -724,6 +883,7 @@ export default function App() {
         setStories(updatedStories);
         setActiveStory(newStory);
         setCurrentStoryPage(0);
+        handleQuestProgress('read_story'); // Update Quest
     } catch (e) {
         console.error(e);
         alert("Hikaye oluşturulamadı. Lütfen tekrar dene.");
@@ -767,6 +927,9 @@ export default function App() {
       await updateWordInDb({ ...word, srs: newSRS, history: updatedHistory });
       setSessionResults(prev => [...prev, { wordId: word.id, term: word.term, isCorrect: grade !== 'again', grade }]);
       setSessionCount(prev => prev + 1);
+      
+      handleQuestProgress('study_words'); // Update Quest
+
       if (grade !== 'again') {
          let xp = grade === 'easy' ? 10 : grade === 'good' ? 5 : 2;
          handleAddXP(xp);
@@ -809,11 +972,11 @@ export default function App() {
            generateAudio(newWord.term).then(audio => {
               if (audio) updateWordInDb({ ...newWord, audioBase64: audio });
            });
+           handleQuestProgress('add_words'); // Update Quest
            setSelectedWordForAdd(null);
       } catch (e) { console.error(e); } finally { setIsLookupLoading(false); }
   };
 
-  // ... renderWordEditor, renderPreviewModal, renderStudy, renderStudio, renderLibrary, renderDashboard, renderDiscover ...
   function renderWordEditor() {
       if (!editingWord) return null;
       return (
@@ -853,7 +1016,7 @@ export default function App() {
           <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
               <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-slide-up border border-zinc-100 dark:border-zinc-800 relative">
                   <div className="text-center mb-6">
-                      <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Kelime Bulundu</div>
+                      <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-2">Günün Sürprizi</div>
                       <h2 className="text-4xl font-black text-black dark:text-white mb-2">{previewWord.term}</h2>
                       <p className="text-lg text-zinc-500 font-medium">{previewWord.translation}</p>
                       <div className="flex justify-center mt-3">
@@ -873,29 +1036,64 @@ export default function App() {
                       <p className="text-sm text-zinc-600 dark:text-zinc-300 italic">"{previewWord.exampleSentence}"</p>
                   </div>
 
-                  <div className="flex gap-3">
-                      <button 
-                        onClick={() => setPreviewWord(null)} 
-                        className="flex-1 py-3.5 text-zinc-500 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-                      >
-                          Vazgeç
-                      </button>
-                      <button 
-                        onClick={handleAddPreviewWord} 
-                        disabled={isLookupLoading} 
-                        className="flex-[2] py-3.5 bg-black dark:bg-white text-white dark:text-black font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
-                      >
-                          {isLookupLoading ? <Loader2 className="animate-spin" /> : <Plus size={18} />}
-                          Listeme Ekle
-                      </button>
+                  <button 
+                    onClick={() => setPreviewWord(null)} 
+                    className="w-full py-3.5 bg-black dark:bg-white text-white dark:text-black font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"
+                  >
+                      Harika!
+                  </button>
+              </div>
+          </div>
+      )
+  }
+
+  function renderAudioPlayer() {
+      if (!showAudioPlayer) return null;
+      const currentWord = words[audioPlayerCurrentIndex];
+      return (
+          <div className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-md flex flex-col justify-end animate-fade-in">
+              <div onClick={() => setShowAudioPlayer(false)} className="flex-1"></div>
+              <div className="bg-white dark:bg-zinc-950 rounded-t-[2.5rem] p-8 shadow-2xl animate-slide-up border-t border-zinc-200 dark:border-zinc-800">
+                  <div className="w-16 h-1 bg-zinc-200 dark:bg-zinc-800 rounded-full mx-auto mb-8"></div>
+                  
+                  <div className="text-center mb-10">
+                      {currentWord ? (
+                        <>
+                             <div className="w-24 h-24 rounded-full bg-zinc-100 dark:bg-zinc-800 mx-auto mb-6 flex items-center justify-center shadow-inner">
+                                <Headphones size={40} className="text-black dark:text-white" />
+                             </div>
+                             <h2 className="text-3xl font-black text-black dark:text-white mb-2">{currentWord.term}</h2>
+                             <p className="text-lg text-zinc-500 font-medium">{currentWord.translation}</p>
+                             <div className="mt-4 text-xs font-bold uppercase tracking-widest text-zinc-400 bg-zinc-100 dark:bg-zinc-900 inline-block px-3 py-1 rounded-full">
+                                 {audioPlayerCurrentIndex + 1} / {words.length}
+                             </div>
+                        </>
+                      ) : (
+                          <div className="text-zinc-500">Kelime listen boş.</div>
+                      )}
                   </div>
+
+                  <div className="flex items-center justify-center gap-8 mb-8">
+                       <button onClick={() => setAudioPlayerCurrentIndex(prev => Math.max(0, prev - 1))} className="p-4 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
+                           <SkipBack size={28} className="text-black dark:text-white" />
+                       </button>
+                       <button 
+                            onClick={() => setIsAudioPlayerPlaying(!isAudioPlayerPlaying)}
+                            className="w-20 h-20 bg-black dark:bg-white text-white dark:text-black rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all"
+                       >
+                           {isAudioPlayerPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" />}
+                       </button>
+                       <button onClick={() => setAudioPlayerCurrentIndex(prev => Math.min(words.length - 1, prev + 1))} className="p-4 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
+                           <SkipForward size={28} className="text-black dark:text-white" />
+                       </button>
+                  </div>
+                  <button onClick={() => setShowAudioPlayer(false)} className="w-full py-4 text-zinc-400 font-bold hover:text-black dark:hover:text-white transition-colors">Kapat</button>
               </div>
           </div>
       )
   }
 
   function renderStudy() {
-      // ... (existing implementation)
       const sessionWords = dueWords.length > 0 ? dueWords : weakWords;
       if (sessionWords.length === 0 || sessionCount >= initialSessionSize) {
           return (
@@ -966,7 +1164,6 @@ export default function App() {
   }
 
   function renderStudio() {
-    // ... (existing implementation)
     if (activeStory) {
         const pages = storyPages;
         const content = pages[currentStoryPage];
@@ -1106,55 +1303,8 @@ export default function App() {
         </div>
     );
   }
-
-  function renderLibrary() {
-      // ... (existing implementation)
-      const filteredWords = words.filter(w => {
-          const matchesSearch = w.term.toLowerCase().includes(librarySearch.toLowerCase()) || w.translation.toLowerCase().includes(librarySearch.toLowerCase());
-          if (libraryFilter === 'all') return matchesSearch;
-          if (libraryFilter === 'new') return matchesSearch && w.srs.streak === 0;
-          if (libraryFilter === 'learning') return matchesSearch && w.srs.streak > 0 && w.srs.streak < 5;
-          if (libraryFilter === 'mastered') return matchesSearch && w.srs.streak >= 5;
-          return false;
-      });
-      return (
-          <div className="fixed inset-0 z-[60] bg-zinc-50 dark:bg-zinc-950 flex flex-col animate-slide-up">
-              <div className="p-6 pb-2 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
-                  <div className="flex items-center gap-4 mb-6">
-                      <button onClick={() => setShowLibrary(false)} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800"><ArrowLeft size={24} className="text-black dark:text-white" /></button>
-                      <h2 className="text-2xl font-black text-black dark:text-white">Kelimelerim</h2>
-                  </div>
-                  <div className="relative mb-4">
-                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
-                      <input value={librarySearch} onChange={(e) => setLibrarySearch(e.target.value)} placeholder="Kelime ara..." className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-3 pl-12 rounded-xl outline-none text-black dark:text-white" />
-                  </div>
-                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                      {(['all', 'new', 'learning', 'mastered'] as const).map(f => (
-                          <button key={f} onClick={() => setLibraryFilter(f)} className={`px-4 py-2 rounded-full text-xs font-bold uppercase whitespace-nowrap transition-colors ${libraryFilter === f ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-500'}`}>{f === 'all' ? 'Tümü' : f === 'new' ? 'Yeni' : f === 'learning' ? 'Öğreniliyor' : 'Ezberlendi'}</button>
-                      ))}
-                  </div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-6 space-y-3">
-                  {filteredWords.map(word => (
-                      <div key={word.id} className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex items-center justify-between group">
-                          <div className="flex items-center gap-4">
-                              <div className={`w-2 h-12 rounded-full ${word.srs.streak >= 5 ? 'bg-green-500' : word.srs.streak > 0 ? 'bg-blue-500' : 'bg-orange-500'}`}></div>
-                              <div><p className="font-bold text-lg text-black dark:text-white">{word.term}</p><p className="text-zinc-500 text-sm">{word.translation}</p></div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                              <button onClick={() => playWordAudio(word)} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-black dark:hover:text-white"><Volume2 size={18} /></button>
-                              <button onClick={() => setEditingWord(word)} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-blue-500"><Edit2 size={18} /></button>
-                          </div>
-                      </div>
-                  ))}
-                  {filteredWords.length === 0 && <div className="text-center py-10 text-zinc-400">Sonuç bulunamadı.</div>}
-              </div>
-          </div>
-      )
-  }
-
+  
   function renderDashboard() {
-    // ... (existing implementation)
     const hours = new Date().getHours();
     const greeting = hours < 12 ? 'Günaydın' : hours < 18 ? 'Tünaydın' : 'İyi Akşamlar';
     return (
@@ -1187,12 +1337,28 @@ export default function App() {
                 </div>
              </div>
              
-             <div className="grid grid-cols-3 gap-3">
-                 <div className="bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800 text-center"><p className="text-xs text-zinc-400 font-bold uppercase">Toplam</p><p className="text-xl font-black text-black dark:text-white">{words.length}</p></div>
-                 <div className="bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800 text-center"><p className="text-xs text-zinc-400 font-bold uppercase">Hedef</p><p className="text-xl font-black text-black dark:text-white">{userProfile?.studyTime}</p></div>
-                 <div className="bg-white dark:bg-zinc-900 p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800 text-center"><p className="text-xs text-zinc-400 font-bold uppercase">Ustalık</p><p className="text-xl font-black text-black dark:text-white">{words.length > 0 ? Math.round((words.filter(w => w.srs.streak > 4).length / words.length) * 100) : 0}%</p></div>
+             {/* Quests Widget */}
+             <div className="bg-white dark:bg-zinc-900 p-5 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                 <h3 className="text-sm font-bold text-black dark:text-white mb-3 flex items-center gap-2"><CheckCircle2 size={16} className="text-blue-500" /> Günlük Görevler</h3>
+                 <div className="space-y-3">
+                     {(userProfile?.quests || DAILY_QUESTS_TEMPLATE).map(quest => (
+                         <div key={quest.id} className="flex items-center gap-3">
+                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${quest.completed ? 'bg-green-100 dark:bg-green-900/30 grayscale-0' : 'bg-zinc-100 dark:bg-zinc-800 grayscale'}`}>{quest.icon}</div>
+                             <div className="flex-1">
+                                 <div className="flex justify-between items-center mb-1">
+                                     <span className={`text-xs font-bold ${quest.completed ? 'text-green-600 dark:text-green-400 line-through' : 'text-black dark:text-white'}`}>{quest.title}</span>
+                                     <span className="text-[10px] font-bold text-zinc-400 uppercase">{quest.progress}/{quest.target}</span>
+                                 </div>
+                                 <div className="h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                                     <div className={`h-full transition-all duration-500 ${quest.completed ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(100, (quest.progress / quest.target) * 100)}%` }}></div>
+                                 </div>
+                             </div>
+                             {quest.completed && <div className="text-green-500"><CheckCircle2 size={16} /></div>}
+                         </div>
+                     ))}
+                 </div>
              </div>
-            
+
             <AdBanner adSlot="dashboard-mid" />
 
             <div className="grid grid-cols-2 gap-3">
@@ -1200,19 +1366,28 @@ export default function App() {
                     id="action-review"
                     onClick={() => setView(AppView.STUDY)}
                     disabled={dueWords.length === 0 && weakWords.length === 0}
-                    className={`p-5 rounded-[2rem] flex flex-col justify-between h-32 border transition-all active:scale-95 text-left relative overflow-hidden ${dueWords.length > 0 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 border-transparent' : weakWords.length > 0 ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30 border-transparent' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-800'}`}
+                    className={`p-5 rounded-[2rem] flex flex-col justify-between h-36 border transition-all active:scale-95 text-left relative overflow-hidden ${dueWords.length > 0 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 border-transparent' : weakWords.length > 0 ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30 border-transparent' : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-800'}`}
                 >
                     <div className="relative z-10 flex justify-between items-start w-full"><div className="bg-white/20 w-10 h-10 rounded-full flex items-center justify-center backdrop-blur-sm"><Layers size={20} className="text-white" /></div>{dueWords.length > 0 && <span className="bg-white text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">{dueWords.length} Hazır</span>}</div>
                     <div className="relative z-10"><div className="font-bold text-xl leading-none mb-1">{dueWords.length > 0 ? 'Tekrar Et' : weakWords.length > 0 ? 'Eksik Kapat' : 'Tekrar Et'}</div><div className={`text-[10px] font-bold uppercase tracking-wider text-white/80`}>{dueWords.length > 0 ? 'Oturumu Başlat' : weakWords.length > 0 ? 'Zorları Çalış' : 'Oturumu Başlat'}</div></div>
                 </button>
-                <button 
-                    id="action-discover"
-                    onClick={() => setView(AppView.DISCOVER)}
-                    className="bg-white dark:bg-zinc-900 p-5 rounded-[2rem] flex flex-col justify-between h-32 border border-zinc-200 dark:border-zinc-800 shadow-sm transition-all active:scale-95 text-left group"
-                >
-                    <div className="bg-zinc-50 dark:bg-zinc-800 w-10 h-10 rounded-full flex items-center justify-center"><Search size={20} className="text-black dark:text-white" /></div>
-                    <div><div className="font-bold text-xl leading-none mb-1 text-black dark:text-white">Kelime Ekle</div><div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300">Yeni Kelime Keşfet</div></div>
-                </button>
+                <div className="grid grid-rows-2 gap-3 h-36">
+                    <button 
+                        id="action-discover"
+                        onClick={() => setView(AppView.DISCOVER)}
+                        className="bg-white dark:bg-zinc-900 p-4 rounded-[1.5rem] flex items-center gap-3 border border-zinc-200 dark:border-zinc-800 shadow-sm transition-all active:scale-95 text-left"
+                    >
+                        <div className="bg-zinc-50 dark:bg-zinc-800 w-8 h-8 shrink-0 rounded-full flex items-center justify-center"><Search size={16} className="text-black dark:text-white" /></div>
+                        <div><div className="font-bold text-sm leading-none text-black dark:text-white">Kelime Ekle</div></div>
+                    </button>
+                    <button 
+                        onClick={() => { setShowAudioPlayer(true); setIsAudioPlayerPlaying(true); }}
+                        className="bg-zinc-900 dark:bg-zinc-800 p-4 rounded-[1.5rem] flex items-center gap-3 shadow-sm transition-all active:scale-95 text-left text-white"
+                    >
+                        <div className="bg-white/20 w-8 h-8 shrink-0 rounded-full flex items-center justify-center"><Headphones size={16} className="text-white" /></div>
+                        <div><div className="font-bold text-sm leading-none">Pasif Dinleme</div><div className="text-[9px] opacity-70 uppercase tracking-widest mt-0.5">Oto Oynat</div></div>
+                    </button>
+                </div>
             </div>
             
             <div>
@@ -1234,163 +1409,258 @@ export default function App() {
   }
 
   function renderDiscover() {
-       // ... (existing implementation)
-       return (
-          <div className="p-6 pb-28 space-y-6 animate-fade-in max-w-md mx-auto">
-              <header className="pt-8 mb-6"><h2 className="text-4xl font-black text-black dark:text-white tracking-tighter mb-2">Kelime Atölyesi</h2><p className="text-zinc-500 font-medium">Yeni kelimeler üret veya sözlükten ekle.</p></header>
-               <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden border border-blue-500/50">
-                  <div className="absolute -right-4 -top-4 opacity-20"><Sparkles size={120} /></div>
-                  <div className="relative z-10">
-                      <div className="inline-block px-3 py-1 bg-white/10 backdrop-blur-md rounded-lg text-[10px] font-bold uppercase tracking-widest mb-4 border border-white/20">AI Destekli</div>
-                      <h3 className="text-2xl font-bold mb-2">Günlük Karışım</h3>
-                      <p className="text-blue-100 text-sm mb-6 max-w-[200px]">Seviyene ({userProfile?.level}) uygun, {userProfile?.dailyTarget} yeni kelimeyi otomatik oluştur.</p>
-                      <button onClick={() => handleGenerateDaily(false)} disabled={isGenerating} className="w-full bg-white text-blue-600 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">{isGenerating ? <Loader2 className="animate-spin" /> : <Zap size={18} fill="currentColor" />}{isGenerating ? 'Oluşturuluyor...' : 'Karışımı Oluştur'}</button>
+      const TOPIC_CATEGORIES = [
+          { id: 'Business English', label: 'İş Dünyası', icon: Briefcase, color: 'from-blue-500 to-indigo-600', shadow: 'shadow-blue-500/20' },
+          { id: 'Travel Essentials', label: 'Seyahat', icon: Plane, color: 'from-orange-400 to-red-500', shadow: 'shadow-orange-500/20' },
+          { id: 'Academic Words', label: 'Akademik', icon: GraduationCap, color: 'from-purple-500 to-pink-600', shadow: 'shadow-purple-500/20' },
+          { id: 'Technology', label: 'Teknoloji', icon: Cpu, color: 'from-cyan-400 to-blue-500', shadow: 'shadow-cyan-500/20' },
+          { id: 'Arts & Culture', label: 'Sanat', icon: Palette, color: 'from-pink-400 to-rose-500', shadow: 'shadow-pink-500/20' },
+          { id: 'Health', label: 'Sağlık', icon: HeartPulse, color: 'from-red-400 to-rose-600', shadow: 'shadow-red-500/20' },
+          { id: 'Nature', label: 'Doğa', icon: Leaf, color: 'from-emerald-400 to-green-600', shadow: 'shadow-emerald-500/20' },
+          { id: 'Daily Conversation', label: 'Günlük', icon: MessageSquare, color: 'from-zinc-500 to-zinc-700', shadow: 'shadow-zinc-500/20' },
+      ];
+
+      return (
+          <div className="h-full flex flex-col pt-8 animate-fade-in max-w-md mx-auto pb-28">
+              <header className="px-6 mb-6">
+                  <h2 className="text-4xl font-black text-black dark:text-white tracking-tighter mb-2">Keşfet</h2>
+                  <p className="text-zinc-500 font-medium">Yeni kelimeler öğren.</p>
+              </header>
+
+              <div className="flex-1 overflow-y-auto scrollbar-hide px-6 space-y-8">
+                  
+                  {/* SEARCH BAR (Stickyish) */}
+                  <div className="sticky top-0 z-20 py-2 bg-zinc-50/80 dark:bg-black/80 backdrop-blur-md -mx-2 px-2">
+                       <div className="bg-white dark:bg-zinc-900 p-2 rounded-[2rem] shadow-lg border border-zinc-100 dark:border-zinc-800 flex items-center transition-all focus-within:ring-2 focus-within:ring-black dark:focus-within:ring-white">
+                          <input 
+                              type="text" 
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleManualSearch()}
+                              placeholder="Bir kelime ara ve ekle..."
+                              className="flex-1 bg-transparent border-none outline-none p-3 pl-4 font-bold text-lg text-black dark:text-white placeholder:text-zinc-300 dark:placeholder:text-zinc-600"
+                          />
+                          <button 
+                              onClick={handleManualSearch} 
+                              disabled={isSearching}
+                              className="bg-black dark:bg-white text-white dark:text-black w-12 h-12 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shrink-0"
+                          >
+                              {isSearching ? <Loader2 className="animate-spin" size={20} /> : <Search size={20} />}
+                          </button>
+                      </div>
                   </div>
-               </div>
-              <div className="relative z-20">
-                  <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4">Akıllı Sözlük</h3>
-                   <div className="flex gap-2">
-                      <div className="relative flex-1"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} /><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Kelime arat ve ekle..." className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 pl-12 rounded-2xl outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all shadow-sm text-black dark:text-white" onKeyDown={(e) => e.key === 'Enter' && handleManualSearch()} /></div>
-                      <button onClick={handleManualSearch} disabled={isSearching} className="bg-black dark:bg-white text-white dark:text-black p-4 rounded-2xl transition-transform active:scale-95 disabled:opacity-50">{isSearching ? <Loader2 className="animate-spin" /> : <ArrowRight />}</button>
-                   </div>
-                   <p className="text-xs text-zinc-400 mt-2 pl-2">Aradığın kelime önce gösterilir, sonra istersen ekleyebilirsin.</p>
-              </div>
-              <div className="mt-8">
-                  <div className="flex justify-between items-center mb-4"><h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Son Eklenenler</h3><button onClick={() => setShowLibrary(true)} className="text-xs font-bold text-blue-600 dark:text-blue-400">Tümü</button></div>
-                  <div className="space-y-3">
-                      {words.slice(0, 5).map((word) => (
-                          <div key={word.id} className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex justify-between items-center shadow-sm">
-                              <div><p className="font-bold text-black dark:text-white">{word.term}</p><p className="text-xs text-zinc-500">{word.translation}</p></div>
-                              <button onClick={() => playWordAudio(word)} className="w-8 h-8 rounded-full bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors"><Volume2 size={14} /></button>
-                          </div>
-                      ))}
-                      {words.length === 0 && <div className="text-center p-6 text-zinc-400 text-sm bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800">Henüz kelime eklemedin.</div>}
+
+                  {/* HERO: MAGIC GENERATOR */}
+                  <div>
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 ml-1">Sana Özel</h3>
+                      <button 
+                          onClick={() => handleGenerateDaily(false)}
+                          disabled={isGenerating}
+                          className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-purple-800 text-white p-6 rounded-[2.5rem] shadow-xl shadow-purple-500/20 relative overflow-hidden group active:scale-[0.98] transition-all text-left"
+                      >
+                           <div className="absolute top-0 right-0 p-8 opacity-20 group-hover:rotate-12 transition-transform duration-500"><Sparkles size={100} fill="currentColor" /></div>
+                           <div className="relative z-10">
+                               <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-4 border border-white/20 shadow-inner">
+                                   {isGenerating ? <Loader2 className="animate-spin" /> : <Wand2 />}
+                               </div>
+                               <h3 className="text-2xl font-bold mb-1">Sihirli Liste</h3>
+                               <p className="text-indigo-100 text-sm font-medium opacity-90 max-w-[200px] leading-relaxed">
+                                   Hedefine ({userProfile?.goal}) uygun {userProfile?.dailyTarget} kelimelik günlük paketini oluştur.
+                               </p>
+                           </div>
+                      </button>
                   </div>
+
+                  {/* SURPRISE ME */}
+                   <div>
+                      <button 
+                          onClick={handleSurpriseWord}
+                          disabled={isSearching}
+                          className="w-full bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 p-5 rounded-[2rem] shadow-sm flex items-center gap-4 group active:scale-[0.98] transition-all"
+                      >
+                           <div className="w-14 h-14 bg-yellow-400 rounded-2xl flex items-center justify-center text-yellow-900 shadow-lg shadow-yellow-500/20 group-hover:scale-110 transition-transform">
+                               <Gift size={24} />
+                           </div>
+                           <div className="text-left flex-1">
+                               <h3 className="text-lg font-bold text-black dark:text-white">Bana Sürpriz Yap</h3>
+                               <p className="text-zinc-500 text-xs font-medium">Rastgele ilginç bir kelime öğren.</p>
+                           </div>
+                           <div className="w-10 h-10 rounded-full bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-black dark:group-hover:text-white transition-colors">
+                               <ArrowRight size={18} />
+                           </div>
+                      </button>
+                  </div>
+
+                  {/* TOPIC GRID */}
+                  <div>
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 ml-1">Koleksiyonlar</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                          {TOPIC_CATEGORIES.map(cat => (
+                              <button 
+                                  key={cat.id} 
+                                  onClick={() => handleGenerateBatchByTopic(cat.id)}
+                                  disabled={isGenerating}
+                                  className={`relative overflow-hidden bg-white dark:bg-zinc-900 p-4 rounded-[1.8rem] text-left border border-zinc-100 dark:border-zinc-800 shadow-sm hover:shadow-lg transition-all active:scale-[0.98] group h-32 flex flex-col justify-between`}
+                              >
+                                  <div className={`absolute -right-4 -top-4 w-20 h-20 bg-gradient-to-br ${cat.color} rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition-opacity`}></div>
+                                  
+                                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${cat.color} flex items-center justify-center text-white shadow-md ${cat.shadow}`}>
+                                      <cat.icon size={18} />
+                                  </div>
+                                  
+                                  <div>
+                                      <span className="font-bold text-black dark:text-white text-base block">{cat.label}</span>
+                                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">5 Kelime</span>
+                                  </div>
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+
               </div>
           </div>
       );
   }
 
   function renderProfile() {
-      const achievements: Achievement[] = [
-          { id: '1', title: 'İlk Adım', description: 'İlk kelimeni öğrendin', icon: '🌱', unlocked: (words.length > 0), progress: Math.min(1, words.length), maxProgress: 1 },
-          { id: '2', title: 'Kelime Avcısı', description: '50 kelimeye ulaş', icon: '🏹', unlocked: (words.length >= 50), progress: Math.min(50, words.length), maxProgress: 50 },
-          { id: '3', title: 'Ateşli', description: '3 günlük seri yap', icon: '🔥', unlocked: true, progress: userProfile?.streak || 0, maxProgress: 3 }, 
-          { id: '4', title: 'Hikaye Anlatıcı', description: 'İlk hikayeni oluştur', icon: '📖', unlocked: (stories.length > 0), progress: stories.length, maxProgress: 1 },
-      ];
-
-      // Calculate Statistics
-      const masteredCount = words.filter(w => w.srs.streak >= 5).length;
-      const learningCount = words.filter(w => w.srs.streak > 0 && w.srs.streak < 5).length;
-      const newCount = words.filter(w => w.srs.streak === 0).length;
-      
-      const totalWords = words.length;
-      const masteryPercentage = totalWords > 0 ? (masteredCount / totalWords) * 100 : 0;
-      const learningPercentage = totalWords > 0 ? (learningCount / totalWords) * 100 : 0;
-      
-      // Calculate Word Types
-      const nouns = words.filter(w => w.type.toLowerCase().includes('noun')).length;
-      const verbs = words.filter(w => w.type.toLowerCase().includes('verb')).length;
-      const adjs = words.filter(w => w.type.toLowerCase().includes('adj')).length;
-      const totalTyped = nouns + verbs + adjs || 1;
-
+      if (!userProfile) return null;
       return (
-          <div className="p-6 pb-28 space-y-6 animate-fade-in max-w-md mx-auto">
-              <header className="pt-8 flex justify-between items-start">
-                  <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-4xl shadow-inner border border-zinc-200 dark:border-zinc-700">{userProfile?.avatar || '🎓'}</div>
-                      <div>
-                          <h2 className="text-3xl font-black text-black dark:text-white tracking-tighter mb-1">{userProfile?.username || 'Student'}</h2>
-                          <div className="flex items-center gap-2"><span className="bg-black dark:bg-white text-white dark:text-black px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">{userProfile?.level}</span><span className="text-zinc-500 font-bold text-sm">{userProfile?.goal}</span></div>
-                      </div>
-                  </div>
-                  <button onClick={() => setView(AppView.SETTINGS)} className="p-3 bg-zinc-100 dark:bg-zinc-900 rounded-2xl text-zinc-500 hover:text-black dark:hover:text-white transition-colors"><SettingsIcon size={24} /></button>
+          <div className="p-6 h-full flex flex-col pt-8 animate-fade-in max-w-md mx-auto">
+              <header className="flex justify-between items-center mb-8">
+                  <h2 className="text-4xl font-black text-black dark:text-white tracking-tighter">Profil</h2>
+                  <button onClick={() => setView(AppView.SETTINGS)} className="p-3 bg-zinc-100 dark:bg-zinc-900 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors">
+                      <SettingsIcon size={24} className="text-black dark:text-white" />
+                  </button>
               </header>
 
-              {/* Progress Ring Card */}
-              <div className="bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-xl flex items-center gap-6">
-                 <div className="relative w-32 h-32 flex-shrink-0">
-                     <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                        <path className="text-zinc-100 dark:text-zinc-800" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
-                        <path className="text-blue-500 transition-all duration-1000 ease-out" strokeDasharray={`${learningPercentage + masteryPercentage}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
-                        <path className="text-green-500 transition-all duration-1000 ease-out" strokeDasharray={`${masteryPercentage}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
-                     </svg>
-                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                         <span className="text-3xl font-black text-black dark:text-white">{totalWords}</span>
-                         <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Kelime</span>
-                     </div>
-                 </div>
-                 <div className="flex-1 space-y-3">
-                     <div>
-                         <div className="flex justify-between text-xs font-bold mb-1"><span className="text-green-600 dark:text-green-400">Ezberlendi</span><span>{masteredCount}</span></div>
-                         <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{width: `${masteryPercentage}%`}}></div></div>
-                     </div>
-                     <div>
-                         <div className="flex justify-between text-xs font-bold mb-1"><span className="text-blue-600 dark:text-blue-400">Öğreniliyor</span><span>{learningCount}</span></div>
-                         <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{width: `${learningPercentage}%`}}></div></div>
-                     </div>
-                     <div>
-                         <div className="flex justify-between text-xs font-bold mb-1"><span className="text-zinc-500">Yeni</span><span>{newCount}</span></div>
-                         <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-zinc-300 dark:bg-zinc-700" style={{width: `${totalWords > 0 ? (newCount/totalWords)*100 : 0}%`}}></div></div>
-                     </div>
-                 </div>
+              <div className="flex flex-col items-center mb-8">
+                  <div className="w-28 h-28 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center text-6xl mb-4 shadow-lg border-4 border-white dark:border-zinc-900">
+                      {userProfile.avatar}
+                  </div>
+                  <h3 className="text-2xl font-bold text-black dark:text-white mb-1">{userProfile.username}</h3>
+                  <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-bold uppercase tracking-wide">
+                          {userProfile.level}
+                      </span>
+                      <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-xs font-bold uppercase tracking-wide">
+                          {userProfile.league} Lig
+                      </span>
+                  </div>
               </div>
 
-              {/* Detailed Stats */}
-              <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-zinc-50 dark:bg-zinc-900 p-5 rounded-3xl border border-zinc-200 dark:border-zinc-800">
-                      <div className="flex items-center gap-2 mb-2 text-orange-500"><Flame size={20} /><span className="text-xs font-bold uppercase tracking-widest">Seri</span></div>
-                      <div className="text-3xl font-black text-black dark:text-white">{userProfile?.streak} <span className="text-xs font-medium text-zinc-400">Gün</span></div>
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2 text-orange-500">
+                          <Flame size={20} />
+                          <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Seri</span>
+                      </div>
+                      <p className="text-3xl font-black text-black dark:text-white">{userProfile.streak} <span className="text-sm font-medium text-zinc-400">Gün</span></p>
                   </div>
-                  <div className="bg-zinc-50 dark:bg-zinc-900 p-5 rounded-3xl border border-zinc-200 dark:border-zinc-800">
-                      <div className="flex items-center gap-2 mb-2 text-purple-500"><TrendingUp size={20} /><span className="text-xs font-bold uppercase tracking-widest">XP</span></div>
-                      <div className="text-3xl font-black text-black dark:text-white">{userProfile?.xp}</div>
+                  <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2 text-yellow-500">
+                          <Trophy size={20} />
+                          <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Toplam XP</span>
+                      </div>
+                      <p className="text-3xl font-black text-black dark:text-white">{userProfile.xp}</p>
                   </div>
-                  <div className="col-span-2 bg-zinc-50 dark:bg-zinc-900 p-5 rounded-3xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-                       <div><div className="flex items-center gap-2 mb-2 text-yellow-500"><Trophy size={20} /><span className="text-xs font-bold uppercase tracking-widest">Lig</span></div><div className="text-2xl font-black text-black dark:text-white">{userProfile?.league || 'Bronze'}</div></div>
-                       <div className="w-12 h-12 bg-white dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-2xl shadow-sm">{userProfile?.league === 'Diamond' ? '💎' : userProfile?.league === 'Platinum' ? '💠' : userProfile?.league === 'Gold' ? '🏆' : userProfile?.league === 'Silver' ? '🥈' : '🥉'}</div>
+                  <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2 text-green-500">
+                          <Target size={20} />
+                          <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Hedef</span>
+                      </div>
+                      <p className="text-3xl font-black text-black dark:text-white">{userProfile.dailyTarget}</p>
+                  </div>
+                  <div className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2 text-blue-500">
+                          <BookOpen size={20} />
+                          <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Kelime</span>
+                      </div>
+                      <p className="text-3xl font-black text-black dark:text-white">{words.length}</p>
                   </div>
               </div>
-              
-              {/* Word Distribution */}
-              {totalWords > 0 && (
-                  <div className="bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm">
-                      <div className="flex items-center gap-2 mb-6"><PieChart size={20} className="text-zinc-400" /><h3 className="font-bold text-black dark:text-white">Kelime Türleri</h3></div>
-                      <div className="space-y-4">
-                          <div className="flex items-center gap-4">
-                              <span className="text-xs font-bold w-12 text-zinc-500">İsim</span>
-                              <div className="flex-1 h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-indigo-500" style={{width: `${(nouns/totalTyped)*100}%`}}></div></div>
-                              <span className="text-xs font-bold">{nouns}</span>
-                          </div>
-                           <div className="flex items-center gap-4">
-                              <span className="text-xs font-bold w-12 text-zinc-500">Fiil</span>
-                              <div className="flex-1 h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-rose-500" style={{width: `${(verbs/totalTyped)*100}%`}}></div></div>
-                              <span className="text-xs font-bold">{verbs}</span>
-                          </div>
-                           <div className="flex items-center gap-4">
-                              <span className="text-xs font-bold w-12 text-zinc-500">Sıfat</span>
-                              <div className="flex-1 h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-cyan-500" style={{width: `${(adjs/totalTyped)*100}%`}}></div></div>
-                              <span className="text-xs font-bold">{adjs}</span>
-                          </div>
+
+              {/* Streak Freeze Shop */}
+              <div className="bg-gradient-to-r from-cyan-500 to-blue-600 p-6 rounded-[2rem] text-white shadow-lg mb-6 relative overflow-hidden">
+                  <Snowflake size={100} className="absolute -right-6 -bottom-6 opacity-20" />
+                  <div className="relative z-10 flex justify-between items-center">
+                      <div>
+                          <h3 className="text-lg font-bold mb-1">Seri Dondurucu</h3>
+                          <p className="text-cyan-100 text-xs font-medium max-w-[150px]">Bir gün kaçırırsan serini korur.</p>
+                      </div>
+                      <div className="text-right">
+                           <div className="text-2xl font-black mb-1">{userProfile.streakFreeze} <span className="text-sm font-medium opacity-80">Adet</span></div>
+                           <button 
+                              onClick={handleBuyFreeze}
+                              className="px-4 py-2 bg-white text-cyan-600 rounded-xl text-xs font-bold shadow-sm hover:bg-cyan-50 transition-colors"
+                           >
+                               200 XP ile Al
+                           </button>
                       </div>
                   </div>
-              )}
+              </div>
+          </div>
+      );
+  }
 
-              <div>
-                  <h3 className="font-bold text-black dark:text-white text-lg mb-4 px-1">Başarılar</h3>
-                  <div className="space-y-3">
-                      {achievements.map(ach => (
-                          <div key={ach.id} className={`p-4 rounded-2xl border flex items-center gap-4 ${ach.unlocked ? 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 shadow-sm' : 'bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 opacity-60'}`}>
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${ach.unlocked ? 'bg-green-100 dark:bg-green-900/30' : 'bg-zinc-200 dark:bg-zinc-800 grayscale'}`}>{ach.icon}</div>
-                              <div className="flex-1">
-                                  <h4 className="font-bold text-black dark:text-white text-sm">{ach.title}</h4>
-                                  <p className="text-xs text-zinc-500">{ach.description}</p>
-                                  <div className="mt-2 h-1.5 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${(ach.progress / ach.maxProgress) * 100}%` }}></div></div>
-                              </div>
-                              {ach.unlocked ? <CheckCircle2 className="text-green-500" size={20} /> : <Lock className="text-zinc-300" size={20} />}
-                          </div>
-                      ))}
+  function renderLibrary() {
+      const filteredWords = words.filter(w => {
+          if (libraryFilter === 'new') return w.srs.interval === 0;
+          if (libraryFilter === 'learning') return w.srs.interval > 0 && w.srs.interval < 21;
+          if (libraryFilter === 'mastered') return w.srs.interval >= 21;
+          return true;
+      }).filter(w => w.term.toLowerCase().includes(librarySearch.toLowerCase()) || w.translation.toLowerCase().includes(librarySearch.toLowerCase()));
+
+      return (
+          <div className="fixed inset-0 z-[60] bg-zinc-50 dark:bg-black overflow-hidden flex flex-col animate-fade-in">
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex gap-4 items-center">
+                  <button onClick={() => setShowLibrary(false)} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-black dark:text-white">
+                      <ArrowLeft size={24} />
+                  </button>
+                  <div className="flex-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center px-4 py-3">
+                      <Search size={18} className="text-zinc-400 mr-2" />
+                      <input 
+                          value={librarySearch}
+                          onChange={(e) => setLibrarySearch(e.target.value)}
+                          placeholder="Kelimelerinde ara..." 
+                          className="bg-transparent border-none outline-none text-black dark:text-white w-full font-medium"
+                      />
                   </div>
+              </div>
+
+              <div className="p-4 flex gap-2 overflow-x-auto shrink-0 scrollbar-hide bg-white dark:bg-zinc-900 border-b border-zinc-100 dark:border-zinc-800">
+                  {['all', 'new', 'learning', 'mastered'].map(f => (
+                      <button
+                          key={f}
+                          onClick={() => setLibraryFilter(f as any)}
+                          className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide whitespace-nowrap transition-colors ${libraryFilter === f ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'}`}
+                      >
+                          {f === 'all' ? 'Tümü' : f === 'new' ? 'Yeni' : f === 'learning' ? 'Öğreniliyor' : 'Öğrenildi'}
+                      </button>
+                  ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {filteredWords.map(word => (
+                      <div key={word.id} className="bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex justify-between items-center group">
+                          <div>
+                              <h3 className="text-lg font-bold text-black dark:text-white">{word.term}</h3>
+                              <p className="text-sm text-zinc-500">{word.translation}</p>
+                          </div>
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => playWordAudio(word)} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-black dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-700">
+                                  <Volume2 size={16} />
+                              </button>
+                              <button onClick={() => setEditingWord(word)} className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30">
+                                  <Edit2 size={16} />
+                              </button>
+                          </div>
+                      </div>
+                  ))}
+                  {filteredWords.length === 0 && (
+                      <div className="text-center py-20 text-zinc-400">
+                          <p>Kelime bulunamadı.</p>
+                      </div>
+                  )}
               </div>
           </div>
       );
@@ -1412,13 +1682,14 @@ export default function App() {
         {view === AppView.DISCOVER && <div className="h-full w-full overflow-y-auto scrollbar-hide">{renderDiscover()}</div>}
         {view === AppView.STUDIO && renderStudio()}
         {view === AppView.PROFILE && <div className="h-full w-full overflow-y-auto scrollbar-hide">{renderProfile()}</div>}
-        {view === AppView.GAMES && <Games userProfile={userProfile} words={words} onAddXP={handleAddXP} leaderboardData={leaderboardData} />}
+        {view === AppView.GAMES && <Games userProfile={userProfile} words={words} onAddXP={(xp) => { handleAddXP(xp); handleQuestProgress('play_games'); }} leaderboardData={leaderboardData} />}
         {view === AppView.SETTINGS && <Settings userProfile={userProfile} words={words} onUpdateProfile={updateProfile} onBack={() => setView(AppView.PROFILE)} onClearData={handleClearData} onSignOut={handleSignOut} />}
       </div>
 
       {showLibrary && renderLibrary()}
       {editingWord && renderWordEditor()}
       {previewWord && renderPreviewModal()}
+      {showAudioPlayer && renderAudioPlayer()}
       
       {selectedWordForAdd && (
           <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
@@ -1436,7 +1707,7 @@ export default function App() {
           <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[80] bg-black/80 dark:bg-white/90 backdrop-blur-md text-white dark:text-black px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 animate-slide-up"><Sparkles className="text-yellow-400 dark:text-yellow-600" size={20} fill="currentColor" /><div className="flex flex-col"><span className="text-xs font-bold uppercase tracking-widest opacity-80">MemoLingua AI</span><span className="font-bold text-sm">Günlük kelimelerin hazır!</span></div></div>
       )}
 
-      {view !== AppView.STUDIO && view !== AppView.STUDY && view !== AppView.SETTINGS && !showLibrary && !editingWord && !previewWord && !isKeyboardOpen && (
+      {view !== AppView.STUDIO && view !== AppView.STUDY && view !== AppView.SETTINGS && !showLibrary && !editingWord && !previewWord && !isKeyboardOpen && !showAudioPlayer && (
           <Navigation currentView={view} setView={setView} />
       )}
     </div>

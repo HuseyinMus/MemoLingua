@@ -51,6 +51,17 @@ export type UserLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 export type UserGoal = 'General English' | 'IELTS' | 'TOEFL' | 'SAT' | 'Business' | 'Travel';
 export type AppTheme = 'light' | 'dark' | 'system';
 
+export interface Quest {
+  id: string;
+  title: string;
+  icon: string;
+  target: number;
+  progress: number;
+  completed: boolean;
+  rewardXP: number;
+  type: 'study_words' | 'play_games' | 'read_story' | 'add_words';
+}
+
 export interface UserProfile {
   uid?: string; // Firebase Auth ID
   email?: string;
@@ -71,6 +82,8 @@ export interface UserProfile {
   longestStreak: number; // Best streak
   league: UserLeague;
   theme: AppTheme;
+  quests?: Quest[]; // Daily quests
+  lastQuestDate?: string;
   settings: {
     autoPlayAudio: boolean;
     notifications: boolean;

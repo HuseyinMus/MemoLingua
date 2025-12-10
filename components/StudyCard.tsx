@@ -2,6 +2,7 @@
 
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Eye, ArrowRight, Lightbulb, Keyboard, Waves, AlertCircle, X, Check, Mic, MicOff, BrainCircuit, Loader2 } from 'lucide-react';
 import { UserWord, SRSState, StudyMode } from '../types';
@@ -869,9 +870,9 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
              {word.history && word.history.length > 0 && (
                 <div className="w-full max-w-sm mt-4 bg-white dark:bg-zinc-900 p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm shrink-0">
                     <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3">Geçmiş İncelemeler</p>
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                         {word.history.slice().reverse().slice(0, 5).map((h, i) => (
-                            <div key={i} className="flex items-center justify-between text-xs">
+                            <div key={i} className="flex items-center justify-between text-xs border-b border-zinc-100 dark:border-zinc-800 pb-2 last:border-0 last:pb-0">
                                 <span className="text-zinc-500 font-medium">{formatDate(h.date)}</span>
                                 <div className="flex items-center gap-2">
                                     <span className={`px-2 py-0.5 rounded-md font-bold uppercase text-[10px] tracking-wide ${
