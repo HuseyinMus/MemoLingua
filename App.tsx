@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { UserWord, AppView, SRSState, UserProfile, StudyMode, UserLevel, UserGoal, GeneratedStory, Achievement, LeaderboardEntry, WordData, ChatMessage, ChatScenario, SRSHistoryItem, Quest } from './types';
-import { generateDailyBatch, generateAudio, playGeminiAudio, generateContextualStory, generateSingleWord, generateRoleplayResponse } from './services/geminiService';
+import { generateDailyBatch, generateAudio, playGeminiAudio, generateContextualStory, generateSingleWord, generateRoleplayResponse, generatePhrasalVerbBatch } from './services/geminiService';
 import { auth, db } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, onSnapshot, writeBatch, query, orderBy, limit } from 'firebase/firestore';
@@ -14,7 +15,7 @@ import { Auth } from './components/Auth';
 import { Tour } from './components/Tour';
 import { AdBanner } from './components/AdBanner';
 
-import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Lock, Plus, BookMarked, PieChart, TrendingUp, Activity, Headphones, Pause, SkipForward, SkipBack, Gift, Wand2, Compass, Cpu, Palette, HeartPulse, Leaf, Briefcase, Plane, GraduationCap } from 'lucide-react';
+import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Lock, Plus, BookMarked, PieChart, TrendingUp, Activity, Headphones, Pause, SkipForward, SkipBack, Gift, Wand2, Compass, Cpu, Palette, HeartPulse, Leaf, Briefcase, Plane, GraduationCap, Link2, Coffee, FileText } from 'lucide-react';
 
 const PROFILE_STORAGE_KEY = 'memolingua_profile_v1';
 const STORY_STORAGE_KEY = 'memolingua_stories_v1';
@@ -39,28 +40,43 @@ const safeStringify = (obj: any) => {
         return JSON.stringify(obj, (key, value) => {
             if (typeof value === 'object' && value !== null) {
                 if (cache.has(value)) {
+                    // Duplicate reference found, discard key
                     return;
                 }
+                // Store value in our collection
                 cache.add(value);
             }
             return value;
         });
     } catch (e) {
-        console.error("SafeStringify failed", e);
+        // Fallback to empty object if stringify fails completely
         return "{}";
     }
+};
+
+const isPlainObject = (obj: any) => {
+    return Object.prototype.toString.call(obj) === '[object Object]' &&
+           (!obj.constructor || obj.constructor === Object);
 };
 
 const deepSanitize = (obj: any, seen = new WeakSet()): any => {
     if (obj === null || typeof obj !== 'object') {
         return obj === undefined ? null : obj;
     }
+    
+    // Break circular references
     if (seen.has(obj)) return null;
     seen.add(obj);
 
     if (Array.isArray(obj)) {
         return obj.map(item => deepSanitize(item, seen));
     }
+    
+    // Only traverse plain objects to avoid Firestore internal classes
+    if (!isPlainObject(obj)) {
+        return null;
+    }
+
     const result: any = {};
     for (const key of Object.keys(obj)) {
         const value = obj[key];
@@ -241,6 +257,9 @@ export default function App() {
   const [showAudioPlayer, setShowAudioPlayer] = useState(false);
   const [audioPlayerCurrentIndex, setAudioPlayerCurrentIndex] = useState(0);
   const [isAudioPlayerPlaying, setIsAudioPlayerPlaying] = useState(false);
+
+  // Phrasal Verb Mode
+  const [phrasalVerbMode, setPhrasalVerbMode] = useState<'informal' | 'formal'>('informal');
 
   const lastAutoGenerationRef = useRef<string | null>(null);
 
@@ -808,6 +827,37 @@ export default function App() {
           setIsGenerating(false);
       }
   };
+  
+  const handleGeneratePhrasalVerbs = async (verb: string) => {
+      if (!userProfile || isGenerating) return;
+      setIsGenerating(true);
+      try {
+          const targetCount = 5;
+          const existingTerms = words.map(w => w.term);
+          const newBatch = await generatePhrasalVerbBatch(targetCount, userProfile.level, verb, phrasalVerbMode, existingTerms);
+          
+          const newWords: UserWord[] = newBatch.map(w => ({
+              ...w,
+              dateAdded: Date.now(),
+              srs: { nextReview: Date.now(), interval: 0, easeFactor: 2.5, streak: 0 }
+          }));
+          
+          await saveWordsBatch(newWords);
+          newWords.forEach(async (word) => {
+              try {
+                  const audio = await generateAudio(word.term);
+                  if (audio) updateWordInDb({ ...word, audioBase64: audio });
+              } catch(e) {}
+          });
+          handleQuestProgress('add_words', newWords.length);
+          alert(`${verb} için 5 adet ${phrasalVerbMode} phrasal verb eklendi!`);
+      } catch (e) {
+          console.error(e);
+          alert("Üretim başarısız.");
+      } finally {
+          setIsGenerating(false);
+      }
+  };
 
   const handleManualSearch = async () => {
       if (!searchTerm.trim() || !userProfile) return;
@@ -1139,7 +1189,7 @@ export default function App() {
                               <button
                                   key={m.id}
                                   onClick={() => { setOverrideMode(m.id as any); setShowModeMenu(false); }}
-                                  className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-3 transition-colors ${overrideMode === m.id ? 'bg-black dark:bg-white text-white dark:text-black' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800 text-black dark:text-white'}`}
+                                  className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-3 transition-colors ${overrideMode === m.id ? 'bg-black dark:bg-white text-white dark:text-black' : 'hover:bg-zinc-5 dark:hover:bg-zinc-800 text-black dark:text-white'}`}
                               >
                                   <span className="text-base">{m.icon}</span>
                                   {m.label}
@@ -1420,6 +1470,24 @@ export default function App() {
           { id: 'Daily Conversation', label: 'Günlük', icon: MessageSquare, color: 'from-zinc-500 to-zinc-700', shadow: 'shadow-zinc-500/20' },
       ];
 
+      const PHRASAL_VERBS_INFORMAL = [
+          { verb: 'Hang', desc: 'out, up, on...', color: 'bg-orange-500' },
+          { verb: 'Chill', desc: 'out...', color: 'bg-pink-500' },
+          { verb: 'Show', desc: 'up, off...', color: 'bg-yellow-500' },
+          { verb: 'Mess', desc: 'up, around...', color: 'bg-red-500' },
+          { verb: 'Check', desc: 'out, in...', color: 'bg-green-500' },
+          { verb: 'Freak', desc: 'out...', color: 'bg-purple-500' },
+      ];
+
+      const PHRASAL_VERBS_FORMAL = [
+          { verb: 'Carry', desc: 'out (conduct)...', color: 'bg-blue-600' },
+          { verb: 'Draw', desc: 'up (compose)...', color: 'bg-indigo-600' },
+          { verb: 'Lay', desc: 'out (explain)...', color: 'bg-slate-600' },
+          { verb: 'Fill', desc: 'in (inform)...', color: 'bg-cyan-600' },
+          { verb: 'Account', desc: 'for (explain)...', color: 'bg-teal-600' },
+          { verb: 'Call', desc: 'off (cancel)...', color: 'bg-rose-600' },
+      ];
+
       return (
           <div className="h-full flex flex-col pt-8 animate-fade-in max-w-md mx-auto pb-28">
               <header className="px-6 mb-6">
@@ -1489,6 +1557,47 @@ export default function App() {
                                <ArrowRight size={18} />
                            </div>
                       </button>
+                  </div>
+
+                  {/* PHRASAL VERBS SECTION */}
+                  <div className="bg-zinc-100 dark:bg-zinc-900/50 p-5 rounded-[2.5rem]">
+                      <div className="flex justify-between items-center mb-4 px-1">
+                          <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Link2 size={12} /> Phrasal Verbs</h3>
+                          <div className="flex bg-white dark:bg-zinc-800 rounded-lg p-0.5 shadow-sm">
+                              <button 
+                                onClick={() => setPhrasalVerbMode('informal')}
+                                className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase transition-all ${phrasalVerbMode === 'informal' ? 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400' : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200'}`}
+                              >
+                                  Günlük
+                              </button>
+                              <button 
+                                onClick={() => setPhrasalVerbMode('formal')}
+                                className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase transition-all ${phrasalVerbMode === 'formal' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200'}`}
+                              >
+                                  Resmi
+                              </button>
+                          </div>
+                      </div>
+                      
+                      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                          {(phrasalVerbMode === 'informal' ? PHRASAL_VERBS_INFORMAL : PHRASAL_VERBS_FORMAL).map(pv => (
+                              <button
+                                  key={pv.verb}
+                                  onClick={() => handleGeneratePhrasalVerbs(pv.verb)}
+                                  disabled={isGenerating}
+                                  className="min-w-[130px] p-4 rounded-[1.5rem] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-all active:scale-95 group flex flex-col items-center text-center"
+                              >
+                                  <div className={`w-10 h-10 rounded-xl ${pv.color} text-white flex items-center justify-center font-black text-lg mb-2 shadow-md group-hover:scale-110 transition-transform`}>
+                                      {pv.verb.charAt(0)}
+                                  </div>
+                                  <h4 className="font-bold text-base text-black dark:text-white mb-0.5">{pv.verb}</h4>
+                                  <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-wide truncate max-w-full">{pv.desc}</p>
+                              </button>
+                          ))}
+                      </div>
+                      <p className="text-[10px] text-zinc-400 mt-3 text-center px-4 leading-tight">
+                          {phrasalVerbMode === 'informal' ? 'Arkadaş ortamı ve günlük konuşmalar için rahat ifadeler.' : 'İş dünyası ve akademik yazılar için profesyonel fiiller.'}
+                      </p>
                   </div>
 
                   {/* TOPIC GRID */}

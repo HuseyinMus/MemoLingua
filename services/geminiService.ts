@@ -230,6 +230,74 @@ export const generateDailyBatch = async (count: number, level: UserLevel, goal: 
     }
 };
 
+export const generatePhrasalVerbBatch = async (
+    count: number, 
+    level: UserLevel, 
+    baseVerb: string, 
+    mode: 'formal' | 'informal', 
+    existingWords: string[]
+): Promise<WordData[]> => {
+    const ai = getAi();
+    
+    let promptContext = "";
+    if (mode === 'informal') {
+        promptContext = `Generate ${count} INFORMAL/CASUAL Phrasal Verbs derived from the verb "${baseVerb}". These should be commonly used in daily conversation, street talk, or with friends.`;
+    } else {
+        promptContext = `Generate ${count} FORMAL/BUSINESS Phrasal Verbs derived from the verb "${baseVerb}" (or related high-level verbs). Focus on phrasal verbs used in professional, academic, or workplace settings.`;
+    }
+
+    const prompt = `${promptContext}
+    
+    Do NOT include these words: ${existingWords.slice(0, 50).join(', ')}.
+    
+    For each word, provide:
+    - term: The Phrasal Verb (e.g., "Carry out")
+    - translation: Turkish translation
+    - definition: A clear definition. IMPORTANT: For FORMAL verbs, include the single-word formal synonym in parenthesis (e.g. "To do a task (Conduct)").
+    - exampleSentence: A sentence strictly matching the '${mode}' tone (Casual vs Business).
+    - type: 'phrasal verb'
+    - pronunciation: IPA
+    - phoneticSpelling: Simple phonetic
+    
+    Return a strict JSON array of objects.`;
+
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        term: { type: Type.STRING },
+                        translation: { type: Type.STRING },
+                        definition: { type: Type.STRING },
+                        exampleSentence: { type: Type.STRING },
+                        pronunciation: { type: Type.STRING },
+                        phoneticSpelling: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                    },
+                    required: ["term", "translation", "definition", "exampleSentence", "pronunciation", "phoneticSpelling", "type"],
+                }
+            }
+        }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("No response");
+
+    try {
+        const cleanText = text.replace(/```json/g, '').replace(/```/g, '');
+        const list = JSON.parse(cleanText);
+        return list.map((item: any) => ({ ...item, id: crypto.randomUUID() }));
+    } catch (e) {
+        console.error("JSON Parse Error", e);
+        throw new Error("Failed to parse AI response");
+    }
+};
+
 // New Robust Story Generation
 export const generateContextualStory = async (level: UserLevel, goal: UserGoal): Promise<Omit<GeneratedStory, 'id' | 'date'>> => {
     const ai = getAi();
