@@ -35,52 +35,54 @@ interface SessionResult {
 }
 
 const safeStringify = (obj: any) => {
-    const cache = new WeakSet();
-    try {
-        return JSON.stringify(obj, (key, value) => {
-            if (typeof value === 'object' && value !== null) {
-                if (cache.has(value)) {
-                    // Duplicate reference found, discard key
-                    return;
-                }
-                // Store value in our collection
-                cache.add(value);
+    const seen = new WeakSet();
+    const circularReplacer = (key: string, value: any) => {
+        if (typeof value === "object" && value !== null) {
+            if (seen.has(value)) {
+                return; // Remove circular reference
             }
-            return value;
-        });
+            seen.add(value);
+        }
+        return value;
+    };
+
+    try {
+        return JSON.stringify(obj, circularReplacer);
     } catch (e) {
-        // Fallback to empty object if stringify fails completely
+        console.warn("JSON Stringify failed, falling back to empty object string", e);
         return "{}";
     }
 };
 
-const isPlainObject = (obj: any) => {
-    return Object.prototype.toString.call(obj) === '[object Object]' &&
-           (!obj.constructor || obj.constructor === Object);
-};
-
 const deepSanitize = (obj: any, seen = new WeakSet()): any => {
+    // 1. Pass through primitives and null
     if (obj === null || typeof obj !== 'object') {
         return obj === undefined ? null : obj;
     }
     
-    // Break circular references
+    // 2. Break circular references
     if (seen.has(obj)) return null;
     seen.add(obj);
 
+    // 3. Handle Arrays
     if (Array.isArray(obj)) {
         return obj.map(item => deepSanitize(item, seen));
     }
     
-    // Only traverse plain objects to avoid Firestore internal classes
-    if (!isPlainObject(obj)) {
+    // 4. Strict POJO check
+    // This rejects Firestore types, DOM elements, Date objects, etc.
+    // Only allows objects created via {} or new Object()
+    const proto = Object.getPrototypeOf(obj);
+    if (proto !== null && proto !== Object.prototype) {
         return null;
     }
 
+    // 5. Reconstruct the object with sanitized values
     const result: any = {};
     for (const key of Object.keys(obj)) {
         const value = obj[key];
-        if (value !== undefined) {
+        // Skip functions, symbols, and undefined
+        if (value !== undefined && typeof value !== 'function' && typeof value !== 'symbol') {
             result[key] = deepSanitize(value, seen);
         }
     }
@@ -154,7 +156,7 @@ const cleanWord = (data: any): UserWord => {
     if (data.audioBase64) word.audioBase64 = String(data.audioBase64);
     if (data.mnemonic) word.mnemonic = String(data.mnemonic);
     
-    // Explicitly map history to plain objects
+    // Explicitly map history to plain objects to avoid refs
     if (Array.isArray(data.history)) {
         word.history = data.history.map((h: any) => ({
              date: Number(h.date) || Date.now(),
@@ -1027,6 +1029,23 @@ export default function App() {
       } catch (e) { console.error(e); } finally { setIsLookupLoading(false); }
   };
 
+  function renderGenerationLoading() {
+      return (
+          <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-fade-in touch-none">
+              <div className="bg-white dark:bg-zinc-900 p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-xs w-full border border-zinc-200 dark:border-zinc-800 animate-slide-up">
+                  <div className="relative mb-6">
+                      <div className="w-16 h-16 rounded-full border-4 border-indigo-100 dark:border-indigo-900/30 border-t-indigo-600 animate-spin"></div>
+                      <Sparkles className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-600" size={24} fill="currentColor" />
+                  </div>
+                  <h3 className="text-xl font-bold text-black dark:text-white mb-2 tracking-tight">Hazırlanıyor...</h3>
+                  <p className="text-sm text-zinc-500 font-medium leading-relaxed">
+                      Yapay zeka senin için özel kelimeler üretiyor. Bu işlem 10-20 saniye sürebilir.
+                  </p>
+              </div>
+          </div>
+      );
+  }
+
   function renderWordEditor() {
       if (!editingWord) return null;
       return (
@@ -1799,6 +1818,7 @@ export default function App() {
       {editingWord && renderWordEditor()}
       {previewWord && renderPreviewModal()}
       {showAudioPlayer && renderAudioPlayer()}
+      {isGenerating && renderGenerationLoading()}
       
       {selectedWordForAdd && (
           <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in">
