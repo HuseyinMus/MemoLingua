@@ -19,6 +19,7 @@ import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Tr
 
 const PROFILE_STORAGE_KEY = 'memolingua_profile_v1';
 const STORY_STORAGE_KEY = 'memolingua_stories_v1';
+const WORDS_STORAGE_KEY = 'memolingua_words_v1';
 
 // Daily Quests Definition
 const DAILY_QUESTS_TEMPLATE: Quest[] = [
@@ -291,6 +292,17 @@ export default function App() {
     let unsubscribeWords: () => void;
     let isMounted = true;
     
+    // Initial Load from Cache for Speed
+    const cachedWords = localStorage.getItem(WORDS_STORAGE_KEY);
+    if (cachedWords) {
+        try {
+            const parsed = JSON.parse(cachedWords);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                setWords(parsed);
+            }
+        } catch (e) { console.warn("Failed to load cached words", e); }
+    }
+
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
         if (!isMounted) return;
         setLoadingAuth(true);
@@ -332,11 +344,11 @@ export default function App() {
                     const wordsCollectionRef = collection(db, "users", user.uid, "words");
                     unsubscribeWords = onSnapshot(wordsCollectionRef, (snapshot) => {
                         if (!isMounted) return;
-                        const loadedWords = snapshot.docs.map(doc => {
+                        const loadedWords: UserWord[] = snapshot.docs.map(doc => {
                             const data = doc.data();
                             return cleanWord({ ...data, id: doc.id });
                         });
-                        loadedWords.sort((a, b) => b.dateAdded - a.dateAdded);
+                        loadedWords.sort((a: UserWord, b: UserWord) => b.dateAdded - a.dateAdded);
                         setWords(loadedWords);
                     });
 
@@ -460,6 +472,15 @@ export default function App() {
       }
     }
   }, [stories]);
+
+  // Sync Words to Local Storage whenever they change
+  useEffect(() => {
+      if (words.length > 0) {
+          try {
+              localStorage.setItem(WORDS_STORAGE_KEY, safeStringify(words));
+          } catch(e) { console.warn("Failed to cache words", e); }
+      }
+  }, [words]);
 
   useEffect(() => {
       const handleFocusIn = (e: FocusEvent) => {
@@ -586,6 +607,14 @@ export default function App() {
   };
 
   const saveWordsBatch = async (newWords: UserWord[]) => {
+      // Optimistic Update: Update local state immediately
+      setWords(prev => {
+          const wordMap = new Map(prev.map(w => [w.id, w]));
+          newWords.forEach(w => wordMap.set(w.id, w));
+          const updated = Array.from(wordMap.values()).sort((a, b) => b.dateAdded - a.dateAdded);
+          return updated;
+      });
+
       const user = auth.currentUser;
       if (!user) return;
       const batch = writeBatch(db);
@@ -598,6 +627,9 @@ export default function App() {
   };
   
   const updateWordInDb = async (word: UserWord) => {
+      // Optimistic Update
+      setWords(prev => prev.map(w => w.id === word.id ? cleanWord(word) : w));
+
       const user = auth.currentUser;
       if (!user) return;
       const clean = cleanWord(word);
@@ -685,6 +717,7 @@ export default function App() {
     if (confirm('Yerel veriler silinecek.')) {
         localStorage.removeItem(PROFILE_STORAGE_KEY);
         localStorage.removeItem(STORY_STORAGE_KEY);
+        localStorage.removeItem(WORDS_STORAGE_KEY);
         setWords([]);
         setStories(INITIAL_STORIES);
     }
@@ -693,6 +726,7 @@ export default function App() {
   const handleSignOut = async () => {
       await signOut(auth);
       localStorage.removeItem(PROFILE_STORAGE_KEY);
+      localStorage.removeItem(WORDS_STORAGE_KEY);
       setUserProfile(null);
       setView(AppView.AUTH);
   };
