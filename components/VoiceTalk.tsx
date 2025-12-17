@@ -230,6 +230,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
         try { sessionRef.current?.close(); } catch(e) {}
         streamRef.current?.getTracks().forEach(t => t.stop());
         
+        // Ensure AudioContext is not closed multiple times
         if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
             try { await audioContextRef.current.close(); } catch(e) {}
         }
@@ -239,7 +240,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
         if (transcriptHistory.length > 1) { 
             setIsAnalyzing(true);
             try {
-                // Ensure we only pass simple, sanitized versions of history
+                // Ensure we only pass string values to prevent circular structure errors
                 const sanitizedHistory = transcriptHistory.map(t => ({
                     role: t.role,
                     text: String(t.text || '')

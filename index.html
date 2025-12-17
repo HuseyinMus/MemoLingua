@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -11,7 +12,14 @@
       window.process = {
         env: {
           NODE_ENV: 'development',
-          API_KEY: (function() { try { return String(process.env.API_KEY || ''); } catch(e) { return ''; } })(),
+          // Hem API_KEY hem de VITE_API_KEY kontrol edilir
+          API_KEY: (function() { 
+            try { 
+              return String(process.env.API_KEY || process.env.VITE_API_KEY || ''); 
+            } catch(e) { 
+              return ''; 
+            } 
+          })(),
           FIREBASE_API_KEY: 'AIzaSyCbHFt-2mkzs24ASj_pDpw8Euo6JJeKCBk',
           FIREBASE_AUTH_DOMAIN: 'fitback-184bd.firebaseapp.com',
           FIREBASE_PROJECT_ID: 'fitback-184bd',

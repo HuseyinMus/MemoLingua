@@ -88,7 +88,11 @@ export const generateContextualStory = async (level: UserLevel, topic: string): 
             }
         }
     });
-    const parsed = JSON.parse(response.text || '{}');
+    
+    // CRITICAL: response.text used as a primitive string to avoid circular structure errors
+    const rawText = response.text || '{}';
+    const parsed = JSON.parse(rawText);
+    
     return {
         id: String(parsed.id || crypto.randomUUID()),
         title: String(parsed.title || ''),
@@ -139,81 +143,9 @@ export const generatePhrasalVerbBatch = async (
     return Array.isArray(parsed) ? parsed.map(sanitizeWord) : [];
 };
 
-export const getWordDeepDive = async (term: string, level: UserLevel): Promise<Partial<WordData>> => {
-    const ai = getAi();
-    const response = await ai.models.generateContent({
-        model: modelId,
-        contents: `Provide a memory aid (mnemonic), a visual scene description, and the origin (etymology) for the word "${term}" at ${level} level. Turkish translations for the mnemonic and visual scene are required.`,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    mnemonic: { type: Type.STRING },
-                    visualScene: { type: Type.STRING },
-                    origin: { type: Type.STRING }
-                },
-                required: ["mnemonic", "visualScene", "origin"]
-            }
-        }
-    });
-    const parsed = JSON.parse(response.text || '{}');
-    return {
-        mnemonic: String(parsed.mnemonic || ''),
-        visualScene: String(parsed.visualScene || ''),
-        origin: String(parsed.origin || '')
-    };
-};
-
-export const extractVocabularyFromImage = async (base64: string, level: UserLevel): Promise<WordData[]> => {
-    const ai = getAi();
-    const response = await ai.models.generateContent({
-        model: modelId,
-        contents: {
-            parts: [
-                { inlineData: { mimeType: 'image/jpeg', data: base64 } },
-                { text: `Extract 5 useful English vocabulary words from this image for a ${level} level learner. Provide translations in Turkish and full details for each word.` }
-            ]
-        },
-        config: {
-            systemInstruction: VOCAB_SYSTEM_INSTRUCTION,
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        term: { type: Type.STRING },
-                        translation: { type: Type.STRING },
-                        definition: { type: Type.STRING },
-                        exampleSentence: { type: Type.STRING },
-                        pronunciation: { type: Type.STRING },
-                        phoneticSpelling: { type: Type.STRING },
-                        type: { type: Type.STRING },
-                    },
-                    required: ["term", "translation", "definition", "exampleSentence", "pronunciation", "phoneticSpelling", "type"]
-                }
-            }
-        }
-    });
-    const parsed = JSON.parse(response.text || '[]');
-    return Array.isArray(parsed) ? parsed.map(sanitizeWord) : [];
-};
-
-export const generateRoleplayResponse = async (message: string, scenario: string, level: UserLevel): Promise<string> => {
-    const ai = getAi();
-    const response = await ai.models.generateContent({
-        model: modelId,
-        contents: `Scenario: ${scenario}. User Level: ${level}. Message: ${message}`,
-        config: {
-            systemInstruction: "You are an English conversation partner. Reply naturally and helpful."
-        }
-    });
-    return String(response.text || "");
-};
-
 export const summarizeVoiceSession = async (transcript: any[], level: UserLevel): Promise<any> => {
     const ai = getAi();
+    // Reduce objects to strings before sending to prevent serialization issues
     const conversationText = transcript
         .map(t => `${String(t.role === 'user' ? 'Student' : 'Tutor')}: ${String(t.text || '')}`)
         .join('\n');
@@ -301,30 +233,6 @@ export const generateDailyBatch = async (count: number, level: UserLevel, goal: 
     return Array.isArray(parsed) ? parsed.map(sanitizeWord) : [];
 };
 
-export const generateAudio = async (text: string): Promise<string> => {
-    const ai = getAi();
-    const response = await ai.models.generateContent({
-        model: ttsModelId,
-        contents: [{ parts: [{ text: `Say clearly: ${text}` }] }],
-        config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
-        },
-    });
-    const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64) throw new Error("Ses üretilemedi.");
-    return String(base64);
-};
-
-export const playGeminiAudio = async (base64: string): Promise<void> => {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-    const buffer = await decodeAudioData(decode(base64), ctx, 24000, 1);
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    source.start();
-};
-
 export const evaluateWriting = async (text: string, level: UserLevel): Promise<WritingFeedback> => {
     const ai = getAi();
     const response = await ai.models.generateContent({
@@ -369,6 +277,110 @@ export const evaluateWriting = async (text: string, level: UserLevel): Promise<W
         })) : [],
         suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.map(String) : []
     };
+};
+
+export const playGeminiAudio = async (base64: string): Promise<void> => {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    try {
+        const buffer = await decodeAudioData(decode(base64), ctx, 24000, 1);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start();
+        source.onended = () => {
+            if (ctx.state !== 'closed') ctx.close();
+        };
+    } catch (err) {
+        if (ctx.state !== 'closed') ctx.close();
+    }
+};
+
+export const generateAudio = async (text: string): Promise<string> => {
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+        model: ttsModelId,
+        contents: [{ parts: [{ text: `Say clearly: ${text}` }] }],
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+        },
+    });
+    const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64) throw new Error("Ses üretilemedi.");
+    return String(base64);
+};
+
+export const getWordDeepDive = async (term: string, level: UserLevel): Promise<Partial<WordData>> => {
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: `Provide a memory aid (mnemonic), a visual scene description, and the origin (etymology) for the word "${term}" at ${level} level. Turkish translations for the mnemonic and visual scene are required.`,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    mnemonic: { type: Type.STRING },
+                    visualScene: { type: Type.STRING },
+                    origin: { type: Type.STRING }
+                },
+                required: ["mnemonic", "visualScene", "origin"]
+            }
+        }
+    });
+    const parsed = JSON.parse(response.text || '{}');
+    return {
+        mnemonic: String(parsed.mnemonic || ''),
+        visualScene: String(parsed.visualScene || ''),
+        origin: String(parsed.origin || '')
+    };
+};
+
+export const extractVocabularyFromImage = async (base64: string, level: UserLevel): Promise<WordData[]> => {
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: {
+            parts: [
+                { inlineData: { mimeType: 'image/jpeg', data: base64 } },
+                { text: `Extract 5 useful English vocabulary words from this image for a ${level} level learner. Provide translations in Turkish and full details for each word.` }
+            ]
+        },
+        config: {
+            systemInstruction: VOCAB_SYSTEM_INSTRUCTION,
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        term: { type: Type.STRING },
+                        translation: { type: Type.STRING },
+                        definition: { type: Type.STRING },
+                        exampleSentence: { type: Type.STRING },
+                        pronunciation: { type: Type.STRING },
+                        phoneticSpelling: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                    },
+                    required: ["term", "translation", "definition", "exampleSentence", "pronunciation", "phoneticSpelling", "type"]
+                }
+            }
+        }
+    });
+    const parsed = JSON.parse(response.text || '[]');
+    return Array.isArray(parsed) ? parsed.map(sanitizeWord) : [];
+};
+
+export const generateRoleplayResponse = async (message: string, scenario: string, level: UserLevel): Promise<string> => {
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: `Scenario: ${scenario}. User Level: ${level}. Message: ${message}`,
+        config: {
+            systemInstruction: "You are an English conversation partner. Reply naturally and helpful."
+        }
+    });
+    return String(response.text || "");
 };
 
 export const generateVisualMnemonic = async (term: string, translation: string): Promise<string> => {
