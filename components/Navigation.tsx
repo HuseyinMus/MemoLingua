@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Home, BookOpen, Gamepad2, Search, MessageSquareText } from 'lucide-react';
+import { Home, BookOpen, Gamepad2, Search, Wand2 } from 'lucide-react';
 import { AppView } from '../types';
 
 interface NavigationProps {
@@ -10,11 +10,11 @@ interface NavigationProps {
 
 export const Navigation: React.FC<NavigationProps> = ({ currentView, setView }) => {
   const navItems = [
-    { view: AppView.DASHBOARD, icon: Home, label: 'Home', id: 'nav-dashboard' },
-    { view: AppView.STUDY, icon: BookOpen, label: 'Review', id: 'nav-review' },
-    { view: AppView.DISCOVER, icon: Search, label: 'Kelime', id: 'nav-discover' },
-    { view: AppView.STUDIO, icon: MessageSquareText, label: 'Studio', id: 'nav-studio' },
-    { view: AppView.GAMES, icon: Gamepad2, label: 'Games', id: 'nav-games' },
+    { view: AppView.DASHBOARD, icon: Home, label: 'Ana Sayfa', id: 'nav-dashboard' },
+    { view: AppView.STUDY, icon: BookOpen, label: 'Çalış', id: 'nav-review' },
+    { view: AppView.STUDIO, icon: Wand2, label: 'Atölye', id: 'nav-studio' },
+    { view: AppView.DISCOVER, icon: Search, label: 'Keşfet', id: 'nav-discover' },
+    { view: AppView.GAMES, icon: Gamepad2, label: 'Arena', id: 'nav-games' },
   ];
 
   return (

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Trophy, Gamepad2, X, Ghost, BrainCircuit, Grid, ArrowLeft, RotateCcw, Grid3x3, Shuffle, Sparkles, Check, Play, Timer, Lightbulb, FastForward, HelpCircle, Zap, Headphones, Volume2, Clock, Flame, Heart } from 'lucide-react';
+import { Trophy, Gamepad2, X, Ghost, BrainCircuit, Grid, ArrowLeft, RotateCcw, Grid3x3, Shuffle, Sparkles, Check, Play, Timer, Lightbulb, FastForward, HelpCircle, Zap, Headphones, Volume2, Clock, Flame, Heart, AlertTriangle } from 'lucide-react';
 import { LeaderboardEntry, UserProfile, UserWord } from '../types';
 
 interface GamesProps {
@@ -12,14 +12,37 @@ interface GamesProps {
 
 // --- COMMON COMPONENTS ---
 
-const GameOverModal = ({ score, xp, onRestart, onExit, title = "Oyun Bitti", subTitle = "İyi iş çıkardın!" }: { score: number, xp: number, onRestart: () => void, onExit: () => void, title?: string, subTitle?: string }) => (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-6 animate-fade-in">
+const GameOverModal = ({ 
+    score, 
+    xp, 
+    onRestart, 
+    onExit, 
+    isWin = true,
+    title = "Oyun Bitti", 
+    subTitle = "İyi iş çıkardın!" 
+}: { 
+    score: number, 
+    xp: number, 
+    onRestart: () => void, 
+    onExit: () => void, 
+    isWin?: boolean,
+    title?: string, 
+    subTitle?: string 
+}) => (
+    <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-6 animate-fade-in">
         <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-[2.5rem] p-8 text-center shadow-2xl border border-zinc-200 dark:border-zinc-800 animate-slide-up">
-            <div className="w-24 h-24 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-tr from-yellow-400/20 to-transparent animate-pulse"></div>
-                <Trophy size={48} className="text-yellow-600 dark:text-yellow-400 relative z-10" />
+            <div className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner relative overflow-hidden ${isWin ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                <div className={`absolute inset-0 bg-gradient-to-tr from-transparent animate-pulse ${isWin ? 'via-green-400/20' : 'via-red-400/20'}`}></div>
+                {isWin ? (
+                    <Trophy size={48} className="text-green-600 dark:text-green-400 relative z-10" />
+                ) : (
+                    <AlertTriangle size={48} className="text-red-600 dark:text-red-400 relative z-10" />
+                )}
             </div>
-            <h2 className="text-3xl font-black text-black dark:text-white mb-1">{title}</h2>
+            
+            <h2 className={`text-3xl font-black mb-1 ${isWin ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {isWin ? 'KAZANDIN!' : 'KAYBETTİN!'}
+            </h2>
             <p className="text-zinc-500 text-sm mb-8 font-medium">{subTitle}</p>
             
             <div className="flex justify-center gap-4 mb-8 bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800">
@@ -28,8 +51,10 @@ const GameOverModal = ({ score, xp, onRestart, onExit, title = "Oyun Bitti", sub
                     <p className="text-3xl font-black text-black dark:text-white leading-none">{score}</p>
                 </div>
                 <div className="flex-1 pl-4">
-                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">XP</p>
-                    <p className="text-3xl font-black text-green-500 leading-none">+{xp}</p>
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">XP Değişimi</p>
+                    <p className={`text-3xl font-black leading-none ${xp >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {xp > 0 ? `+${xp}` : xp}
+                    </p>
                 </div>
             </div>
             
@@ -38,7 +63,7 @@ const GameOverModal = ({ score, xp, onRestart, onExit, title = "Oyun Bitti", sub
                     <RotateCcw size={18} /> Tekrar Oyna
                 </button>
                 <button onClick={onExit} className="w-full py-4 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white font-bold rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
-                    Menüye Dön
+                    Arena Menüsüne Dön
                 </button>
             </div>
         </div>
@@ -48,7 +73,7 @@ const GameOverModal = ({ score, xp, onRestart, onExit, title = "Oyun Bitti", sub
 // --- GAME LOGIC HELPERS ---
 
 // 1. HANGMAN LOGIC
-const useHangman = (words: UserWord[], onEnd: (score: number) => void) => {
+const useHangman = (words: UserWord[], onEnd: (score: number, isWin: boolean) => void) => {
     const [word, setWord] = useState<UserWord | null>(null);
     const [guessed, setGuessed] = useState<Set<string>>(new Set());
     const [lives, setLives] = useState(6);
@@ -78,6 +103,7 @@ const useHangman = (words: UserWord[], onEnd: (score: number) => void) => {
             setLives(newLives);
             if (newLives === 0) {
                 setStatus('lost');
+                onEnd(0, false);
             }
         } else {
             const isWon = word.term.toLowerCase().split('').every(c => 
@@ -85,7 +111,7 @@ const useHangman = (words: UserWord[], onEnd: (score: number) => void) => {
             );
             if (isWon) {
                 setStatus('won');
-                onEnd(50);
+                onEnd(50, true);
             }
         }
     };
@@ -95,7 +121,7 @@ const useHangman = (words: UserWord[], onEnd: (score: number) => void) => {
 
 // 2. SNAKE LOGIC (Educational Version)
 const GRID_SIZE = 20;
-const useSnake = (words: UserWord[], onEnd: (score: number) => void) => {
+const useSnake = (words: UserWord[], onEnd: (score: number, isWin: boolean) => void) => {
     const [snake, setSnake] = useState<{x:number, y:number}[]>([{x: 10, y: 10}]);
     const [dir, setDir] = useState<{x:number, y:number}>({x: 1, y: 0});
     const [food, setFood] = useState<{x:number, y:number}>({x: 15, y: 10});
@@ -132,15 +158,10 @@ const useSnake = (words: UserWord[], onEnd: (score: number) => void) => {
             head.x += dir.x;
             head.y += dir.y;
 
-            // Collision Wall
-            if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
+            // Collision Wall or Self
+            if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE || prev.some(s => s.x === head.x && s.y === head.y)) {
                 setIsGameOver(true);
-                return prev;
-            }
-
-            // Collision Self
-            if (prev.some(s => s.x === head.x && s.y === head.y)) {
-                setIsGameOver(true);
+                onEnd(score, score > 20); // Win if score > 20
                 return prev;
             }
 
@@ -148,14 +169,12 @@ const useSnake = (words: UserWord[], onEnd: (score: number) => void) => {
             
             // Eat Food
             if (head.x === food.x && head.y === food.y) {
-                // Logic: Eating food reveals a letter
                 setLettersRevealed(prev => {
                     const next = prev + 1;
                     if (next >= currentWord.term.length) {
-                        // Word Completed!
-                        setScore(s => s + 50); // Big bonus
+                        setScore(s => s + 50); 
                         setTimeout(() => pickNewWord(), 100);
-                        return 0; // Reset for next word (handled by pickNewWord actually)
+                        return 0; 
                     }
                     return next;
                 });
@@ -171,7 +190,7 @@ const useSnake = (words: UserWord[], onEnd: (score: number) => void) => {
             
             return newSnake;
         });
-    }, [dir, food, isPaused, isGameOver, currentWord, pickNewWord]);
+    }, [dir, food, isPaused, isGameOver, currentWord, pickNewWord, score, onEnd]);
 
     useEffect(() => {
         const interval = setInterval(moveSnake, 150);
@@ -195,7 +214,7 @@ interface MemoryCard {
     isMatched: boolean;
 }
 
-const useMemory = (words: UserWord[], onEnd: (score: number) => void) => {
+const useMemory = (words: UserWord[], onEnd: (score: number, isWin: boolean) => void) => {
     const [cards, setCards] = useState<MemoryCard[]>([]);
     const [flippedIndices, setFlippedIndices] = useState<number[]>([]);
     const [isChecking, setIsChecking] = useState(false);
@@ -225,7 +244,6 @@ const useMemory = (words: UserWord[], onEnd: (score: number) => void) => {
         setTimeElapsed(0);
         setGameStarted(false);
 
-        // Peek phase
         setTimeout(() => {
             setCards(prev => prev.map(c => ({ ...c, isFlipped: false })));
             setIsChecking(false);
@@ -261,7 +279,6 @@ const useMemory = (words: UserWord[], onEnd: (score: number) => void) => {
             const card2 = cards[newFlipped[1]];
 
             if (card1.wordId === card2.wordId) {
-                // Match
                 setTimeout(() => {
                     const matchedCards = [...newCards];
                     matchedCards[newFlipped[0]].isMatched = true;
@@ -274,13 +291,12 @@ const useMemory = (words: UserWord[], onEnd: (score: number) => void) => {
                         if (newM === cards.length / 2) {
                             setIsGameOver(true);
                             const finalScore = Math.max(10, 300 - (moves * 10) - (timeElapsed * 2));
-                            onEnd(finalScore); 
+                            onEnd(finalScore, true); 
                         }
                         return newM;
                     });
                 }, 500);
             } else {
-                // No Match
                 setTimeout(() => {
                     const resetCards = [...newCards];
                     resetCards[newFlipped[0]].isFlipped = false;
@@ -296,18 +312,20 @@ const useMemory = (words: UserWord[], onEnd: (score: number) => void) => {
     return { cards, handleCardClick, moves, isGameOver, init, timeElapsed, gameStarted, matches };
 };
 
-// 4. WORD SCRAMBLE LOGIC (New Interactive Tiles)
+// 4. WORD SCRAMBLE LOGIC
 interface Tile {
     id: string;
     char: string;
     status: 'pool' | 'placed';
 }
 
-const useScramble = (words: UserWord[], onEnd: (score: number) => void) => {
+const useScramble = (words: UserWord[], onEnd: (score: number, isWin: boolean) => void) => {
     const [currentWord, setCurrentWord] = useState<UserWord | null>(null);
     const [tiles, setTiles] = useState<Tile[]>([]);
     const [placedTiles, setPlacedTiles] = useState<Tile[]>([]);
     const [score, setScore] = useState(0);
+    const [timeLeft, setTimeLeft] = useState(60);
+    const [isGameOver, setIsGameOver] = useState(false);
     const [streak, setStreak] = useState(0);
     const [feedback, setFeedback] = useState<'none' | 'correct' | 'wrong'>('none');
     const [hintUsed, setHintUsed] = useState(false);
@@ -317,14 +335,12 @@ const useScramble = (words: UserWord[], onEnd: (score: number) => void) => {
         const random = list[Math.floor(Math.random() * list.length)];
         setCurrentWord(random);
         
-        // Create tiles
         const chars = random.term.toUpperCase().split('').map((c, i) => ({
             id: `tile-${i}-${c}`,
             char: c,
             status: 'pool' as const
         }));
         
-        // Shuffle
         for (let i = chars.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [chars[i], chars[j]] = [chars[j], chars[i]];
@@ -336,18 +352,37 @@ const useScramble = (words: UserWord[], onEnd: (score: number) => void) => {
         setHintUsed(false);
     }, [words]);
 
-    useEffect(() => { nextWord(); }, [nextWord]);
+    const init = useCallback(() => {
+        setScore(0);
+        setTimeLeft(60);
+        setIsGameOver(false);
+        setStreak(0);
+        nextWord();
+    }, [nextWord]);
+
+    useEffect(() => {
+        if (isGameOver) return;
+        const timer = setInterval(() => {
+            setTimeLeft(prev => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    setIsGameOver(true);
+                    onEnd(score, score > 50);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [isGameOver, score, onEnd]);
 
     const handleTileClick = (tile: Tile) => {
-        if (feedback !== 'none') return;
-
+        if (feedback !== 'none' || isGameOver) return;
         if (tile.status === 'pool') {
-            // Move to placed
             const newTiles = tiles.map(t => t.id === tile.id ? { ...t, status: 'placed' as const } : t);
             setTiles(newTiles);
             setPlacedTiles(prev => [...prev, { ...tile, status: 'placed' }]);
         } else {
-            // Move back to pool
             const newPlaced = placedTiles.filter(t => t.id !== tile.id);
             setPlacedTiles(newPlaced);
             const newTiles = tiles.map(t => t.id === tile.id ? { ...t, status: 'pool' as const } : t);
@@ -355,7 +390,6 @@ const useScramble = (words: UserWord[], onEnd: (score: number) => void) => {
         }
     };
 
-    // Auto-check when full
     useEffect(() => {
         if (currentWord && placedTiles.length === currentWord.term.length) {
             const attempt = placedTiles.map(t => t.char).join('');
@@ -369,7 +403,6 @@ const useScramble = (words: UserWord[], onEnd: (score: number) => void) => {
                 setFeedback('wrong');
                 setStreak(0);
                 setTimeout(() => {
-                    // Reset placement on wrong
                     setPlacedTiles([]);
                     setTiles(prev => prev.map(t => ({ ...t, status: 'pool' })));
                     setFeedback('none');
@@ -378,21 +411,11 @@ const useScramble = (words: UserWord[], onEnd: (score: number) => void) => {
         }
     }, [placedTiles, currentWord, streak, hintUsed, nextWord]);
 
-    const useHint = () => {
-        if (hintUsed || !currentWord) return;
-        setHintUsed(true);
-        setScore(s => Math.max(0, s - 5));
-        
-        // Find first correct letter
-        const firstChar = currentWord.term.charAt(0).toUpperCase();
-        // Visual cue only for now to keep logic simple
-    };
-
-    return { currentWord, tiles, placedTiles, handleTileClick, score, feedback, nextWord, streak, useHint, hintUsed };
+    return { currentWord, tiles, placedTiles, handleTileClick, score, feedback, nextWord, streak, timeLeft, isGameOver, init };
 };
 
 // 5. SPEED QUIZ LOGIC
-const useSpeedQuiz = (words: UserWord[], onEnd: (score: number) => void) => {
+const useSpeedQuiz = (words: UserWord[], onEnd: (score: number, isWin: boolean) => void) => {
     const [currentWord, setCurrentWord] = useState<UserWord | null>(null);
     const [options, setOptions] = useState<UserWord[]>([]);
     const [score, setScore] = useState(0);
@@ -451,7 +474,7 @@ const useSpeedQuiz = (words: UserWord[], onEnd: (score: number) => void) => {
                 if (prev <= 1) {
                     clearInterval(timer);
                     setIsGameOver(true);
-                    onEnd(score);
+                    onEnd(score, score > 50);
                     return 0;
                 }
                 return prev - 1;
@@ -466,7 +489,7 @@ const useSpeedQuiz = (words: UserWord[], onEnd: (score: number) => void) => {
 };
 
 // 6. AUDIO CHALLENGE LOGIC
-const useAudioQuiz = (words: UserWord[], onEnd: (score: number) => void) => {
+const useAudioQuiz = (words: UserWord[], onEnd: (score: number, isWin: boolean) => void) => {
     const [currentWord, setCurrentWord] = useState<UserWord | null>(null);
     const [options, setOptions] = useState<UserWord[]>([]);
     const [score, setScore] = useState(0);
@@ -509,7 +532,7 @@ const useAudioQuiz = (words: UserWord[], onEnd: (score: number) => void) => {
                 const newLives = l - 1;
                 if (newLives <= 0) {
                     setIsGameOver(true);
-                    onEnd(score);
+                    onEnd(score, score >= 30);
                 }
                 return newLives;
             });
@@ -528,11 +551,13 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
     
     // --- HANGMAN RENDER ---
     const HangmanGame = () => {
-        const { word, guessed, lives, status, guess, init } = useHangman(words, (points) => onAddXP(points));
+        const { word, guessed, lives, status, guess, init } = useHangman(words, (points, isWin) => {
+            onAddXP(isWin ? points : -10); // Deduct 10 XP on loss
+        });
         
         return (
-            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in relative">
-                <button onClick={() => setActiveGame('none')} className="absolute top-4 left-4 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200"><ArrowLeft size={20} className="text-black dark:text-white" /></button>
+            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in relative overflow-hidden">
+                <button onClick={() => setActiveGame('none')} className="absolute top-4 left-4 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 z-10"><ArrowLeft size={20} className="text-black dark:text-white" /></button>
 
                 <div className="mb-4">
                     <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest text-center">Kelimeyi Tahmin Et</p>
@@ -570,10 +595,10 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
 
                 {status !== 'playing' && (
                     <GameOverModal 
-                        title={status === 'won' ? 'Kazandın!' : 'Kaybettin'}
-                        subTitle={`Doğru kelime: ${word?.term}`}
+                        isWin={status === 'won'}
+                        subTitle={status === 'won' ? `Tebrikler! Kelime: ${word?.term}` : `Maalesef bilemedin. Kelime: ${word?.term}`}
                         score={status === 'won' ? 50 : 0}
-                        xp={status === 'won' ? 50 : 0}
+                        xp={status === 'won' ? 50 : -10}
                         onRestart={init}
                         onExit={() => setActiveGame('none')}
                     />
@@ -603,7 +628,9 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
 
     // --- SNAKE RENDER ---
     const SnakeGame = () => {
-        const { snake, food, score, setDir, isPaused, isGameOver, init, currentWord, lettersRevealed } = useSnake(words, (s) => onAddXP(Math.floor(s/2)));
+        const { snake, food, score, setDir, isGameOver, init, currentWord, lettersRevealed } = useSnake(words, (s, isWin) => {
+            onAddXP(isWin ? Math.floor(s/2) : -5);
+        });
         
         const handleTouch = (d: string) => {
             if (d === 'UP') setDir(prev => prev.y !== 1 ? {x: 0, y: -1} : prev);
@@ -622,7 +649,6 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                     <div className="w-10"></div> 
                 </div>
 
-                {/* Word Progress Display */}
                 <div className="mb-4 text-center h-8">
                     <div className="flex gap-1 justify-center">
                         {currentWord?.term.split('').map((char, i) => (
@@ -637,9 +663,10 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                 <div className="relative bg-zinc-200 dark:bg-zinc-800 rounded-xl border-4 border-zinc-300 dark:border-zinc-700 w-[300px] h-[300px] shadow-inner">
                     {isGameOver && (
                         <GameOverModal 
-                            title="Oyun Bitti"
+                            isWin={score > 30}
+                            title={score > 30 ? "Harika!" : "Oyun Bitti"}
                             score={score}
-                            xp={Math.floor(score/2)}
+                            xp={score > 30 ? Math.floor(score/2) : -5}
                             onRestart={init}
                             onExit={() => setActiveGame('none')}
                         />
@@ -672,11 +699,13 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
 
     // --- MEMORY MATCH RENDER ---
     const MemoryGame = () => {
-        const { cards, handleCardClick, moves, isGameOver, init, timeElapsed, matches } = useMemory(words, (s) => onAddXP(s));
+        const { cards, handleCardClick, moves, isGameOver, init, timeElapsed, matches } = useMemory(words, (s, isWin) => {
+            onAddXP(isWin ? s : -5);
+        });
 
         return (
-            <div className="flex flex-col items-center h-full p-4 animate-fade-in relative">
-                <div className="flex items-center justify-between w-full max-w-sm mb-6 shrink-0 bg-white dark:bg-zinc-900 p-3 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-800">
+            <div className="flex flex-col items-center h-full p-4 animate-fade-in relative overflow-hidden">
+                <div className="flex items-center justify-between w-full max-w-sm mb-6 shrink-0 bg-white dark:bg-zinc-900 p-3 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-800 z-10">
                     <button onClick={() => setActiveGame('none')} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200"><ArrowLeft size={20} className="text-black dark:text-white"/></button>
                     <div className="flex gap-4">
                         <div className="flex items-center gap-1.5 text-black dark:text-white font-bold">
@@ -689,56 +718,59 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                     <button onClick={init} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200"><RotateCcw size={20} className="text-black dark:text-white"/></button>
                 </div>
 
-                {isGameOver ? (
+                {isGameOver && (
                     <GameOverModal 
+                        isWin={true}
                         title="Harika Hafıza!"
                         score={Math.max(10, 300 - (moves * 10) - (timeElapsed * 2))}
                         xp={Math.max(10, 300 - (moves * 10) - (timeElapsed * 2))}
                         onRestart={init}
                         onExit={() => setActiveGame('none')}
                     />
-                ) : (
-                    <div className="grid grid-cols-3 gap-3 w-full max-w-sm flex-1 overflow-y-auto content-start py-4">
-                        {cards.map((card, index) => (
-                            <button
-                                key={index}
-                                onClick={() => handleCardClick(index)}
-                                className={`aspect-[3/4] rounded-xl flex flex-col items-center justify-center p-2 text-center text-xs font-bold shadow-lg transition-all duration-500 transform perspective-1000 ${
-                                    card.isFlipped || card.isMatched 
-                                        ? 'bg-white dark:bg-zinc-800 text-black dark:text-white rotate-y-0 border-b-4 border-zinc-200 dark:border-zinc-700' 
-                                        : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-transparent rotate-y-180 border-b-4 border-indigo-700'
-                                }`}
-                                disabled={card.isMatched}
-                                style={{ transformStyle: 'preserve-3d' }}
-                            >
-                                {(card.isFlipped || card.isMatched) ? (
-                                    <>
-                                        <div className="mb-1 opacity-50 text-[10px]">{card.type === 'term' ? '🇬🇧' : '🇹🇷'}</div>
-                                        <span className="animate-fade-in break-words w-full">{card.content}</span>
-                                    </>
-                                ) : (
-                                    <Sparkles className="text-white/30" size={24} />
-                                )}
-                            </button>
-                        ))}
-                    </div>
                 )}
+                
+                <div className="grid grid-cols-3 gap-3 w-full max-w-sm flex-1 overflow-y-auto content-start py-4">
+                    {cards.map((card, index) => (
+                        <button
+                            key={index}
+                            onClick={() => handleCardClick(index)}
+                            className={`aspect-[3/4] rounded-xl flex flex-col items-center justify-center p-2 text-center text-xs font-bold shadow-lg transition-all duration-500 transform perspective-1000 ${
+                                card.isFlipped || card.isMatched 
+                                    ? 'bg-white dark:bg-zinc-800 text-black dark:text-white rotate-y-0 border-b-4 border-zinc-200 dark:border-zinc-700' 
+                                    : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-transparent rotate-y-180 border-b-4 border-indigo-700'
+                            }`}
+                            disabled={card.isMatched}
+                            style={{ transformStyle: 'preserve-3d' }}
+                        >
+                            {(card.isFlipped || card.isMatched) ? (
+                                <>
+                                    <div className="mb-1 opacity-50 text-[10px]">{card.type === 'term' ? '🇬🇧' : '🇹🇷'}</div>
+                                    <span className="animate-fade-in break-words w-full">{card.content}</span>
+                                </>
+                            ) : (
+                                <Sparkles className="text-white/30" size={24} />
+                            )}
+                        </button>
+                    ))}
+                </div>
             </div>
         );
     };
 
-    // --- WORD SCRAMBLE RENDER (UPDATED) ---
+    // --- WORD SCRAMBLE RENDER ---
     const ScrambleGame = () => {
-        const { currentWord, tiles, placedTiles, handleTileClick, score, feedback, nextWord, streak, useHint, hintUsed } = useScramble(words, (s) => onAddXP(s));
+        const { currentWord, tiles, placedTiles, handleTileClick, score, feedback, nextWord, streak, timeLeft, isGameOver, init } = useScramble(words, (s, isWin) => {
+            onAddXP(isWin ? s : -10);
+        });
 
         return (
-            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in relative max-w-sm mx-auto">
-                 <button onClick={() => { onAddXP(score); setActiveGame('none'); }} className="absolute top-4 left-4 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full"><ArrowLeft size={20} className="text-black dark:text-white"/></button>
+            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in relative max-w-sm mx-auto overflow-hidden">
+                 <button onClick={() => setActiveGame('none')} className="absolute top-4 left-4 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full z-10"><ArrowLeft size={20} className="text-black dark:text-white"/></button>
                  
                  <div className="flex justify-between items-center w-full mb-8 px-4">
                      <div className="text-center">
-                         <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Seri</div>
-                         <div className="text-2xl font-black text-orange-500 flex items-center justify-center gap-1"><Flame size={20} fill="currentColor"/> {streak}</div>
+                         <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Süre</div>
+                         <div className="text-2xl font-black text-blue-500 flex items-center justify-center gap-1"><Clock size={20} /> {timeLeft}s</div>
                      </div>
                      <div className="text-center">
                          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Skor</div>
@@ -746,48 +778,53 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                      </div>
                  </div>
 
-                 <div className="w-full text-center relative transition-all duration-300">
-                     {/* Feedback Overlays */}
+                 {isGameOver && (
+                     <GameOverModal 
+                         isWin={score > 50}
+                         title={score > 50 ? "Süre Doldu!" : "Yetersiz Puan"}
+                         subTitle={`Süren bitti! Toplam skorun: ${score}`}
+                         score={score}
+                         xp={score > 50 ? Math.floor(score/2) : -10}
+                         onRestart={init}
+                         onExit={() => setActiveGame('none')}
+                     />
+                 )}
+
+                 <div className="w-full text-center relative transition-all duration-300 flex-1">
                      {feedback === 'correct' && <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"><Check size={120} className="text-green-500 animate-bounce drop-shadow-lg" /></div>}
                      {feedback === 'wrong' && <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"><X size={120} className="text-red-500 animate-shake drop-shadow-lg" /></div>}
                      
-                     <p className="text-lg font-bold text-zinc-600 dark:text-zinc-300 mb-8 bg-zinc-100 dark:bg-zinc-900 py-3 px-6 rounded-2xl inline-block shadow-sm">
-                         "{currentWord?.translation}"
-                     </p>
-                     
-                     {/* Answer Slots */}
-                     <div className="flex justify-center gap-2 mb-8 h-14">
-                         {placedTiles.map((tile, i) => (
-                             <button 
-                                key={tile.id} 
-                                onClick={() => handleTileClick(tile)}
-                                className="w-10 h-12 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold text-xl shadow-lg animate-slide-up flex items-center justify-center border-b-4 border-zinc-700 dark:border-zinc-300 active:border-b-0 active:translate-y-1"
-                             >
-                                 {tile.char}
-                             </button>
-                         ))}
-                         {/* Empty Slots placeholder */}
-                         {Array.from({ length: Math.max(0, (currentWord?.term.length || 0) - placedTiles.length) }).map((_, i) => (
-                             <div key={i} className="w-10 h-12 bg-zinc-200 dark:bg-zinc-800 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700"></div>
-                         ))}
-                     </div>
-                     
-                     {/* Scrambled Pool */}
-                     <div className="flex flex-wrap justify-center gap-2 mb-8 min-h-[100px]">
-                        {tiles.filter(t => t.status === 'pool').map((tile) => (
-                            <button 
-                                key={tile.id} 
-                                onClick={() => handleTileClick(tile)}
-                                className="w-10 h-12 bg-white dark:bg-zinc-800 text-black dark:text-white rounded-xl font-bold text-xl shadow-md border-b-4 border-zinc-200 dark:border-zinc-700 active:border-b-0 active:translate-y-1 transition-all"
-                            >
-                                {tile.char}
-                            </button>
-                        ))}
-                     </div>
-                     
-                     <div className="flex gap-4 justify-center">
-                         <button onClick={useHint} disabled={hintUsed} className="p-4 rounded-full bg-zinc-100 dark:bg-zinc-900 text-yellow-500 shadow-sm disabled:opacity-50 hover:scale-105 transition-transform"><Lightbulb /></button>
-                         <button onClick={nextWord} className="p-4 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-500 shadow-sm hover:scale-105 transition-transform"><FastForward /></button>
+                     <div className="mt-12">
+                        <p className="text-lg font-bold text-zinc-600 dark:text-zinc-300 mb-8 bg-zinc-100 dark:bg-zinc-900 py-3 px-6 rounded-2xl inline-block shadow-sm">
+                            "{currentWord?.translation}"
+                        </p>
+                        
+                        <div className="flex justify-center gap-2 mb-8 h-14">
+                            {placedTiles.map((tile) => (
+                                <button 
+                                    key={tile.id} 
+                                    onClick={() => handleTileClick(tile)}
+                                    className="w-10 h-12 bg-black dark:bg-white text-white dark:text-black rounded-xl font-bold text-xl shadow-lg animate-slide-up flex items-center justify-center border-b-4 border-zinc-700 dark:border-zinc-300 active:border-b-0 active:translate-y-1"
+                                >
+                                    {tile.char}
+                                </button>
+                            ))}
+                            {Array.from({ length: Math.max(0, (currentWord?.term.length || 0) - placedTiles.length) }).map((_, i) => (
+                                <div key={i} className="w-10 h-12 bg-zinc-200 dark:bg-zinc-800 rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700"></div>
+                            ))}
+                        </div>
+                        
+                        <div className="flex flex-wrap justify-center gap-2 mb-8 min-h-[100px]">
+                            {tiles.filter(t => t.status === 'pool').map((tile) => (
+                                <button 
+                                    key={tile.id} 
+                                    onClick={() => handleTileClick(tile)}
+                                    className="w-10 h-12 bg-white dark:bg-zinc-800 text-black dark:text-white rounded-xl font-bold text-xl shadow-md border-b-4 border-zinc-200 dark:border-zinc-700 active:border-b-0 active:translate-y-1 transition-all"
+                                >
+                                    {tile.char}
+                                </button>
+                            ))}
+                        </div>
                      </div>
                  </div>
             </div>
@@ -796,11 +833,13 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
 
     // --- SPEED QUIZ RENDER ---
     const SpeedQuizGame = () => {
-        const { currentWord, options, score, timeLeft, isGameOver, handleAnswer, init, combo, lastResult } = useSpeedQuiz(words, (s) => onAddXP(s));
+        const { currentWord, options, score, timeLeft, isGameOver, handleAnswer, init, combo, lastResult } = useSpeedQuiz(words, (s, isWin) => {
+            onAddXP(isWin ? s : -10);
+        });
 
         return (
-            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in relative max-w-sm mx-auto">
-                <button onClick={() => { onAddXP(score); setActiveGame('none'); }} className="absolute top-4 left-4 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full"><ArrowLeft size={20} className="text-black dark:text-white"/></button>
+            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in relative max-w-sm mx-auto overflow-hidden">
+                <button onClick={() => setActiveGame('none')} className="absolute top-4 left-4 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full z-10"><ArrowLeft size={20} className="text-black dark:text-white"/></button>
                 
                 <div className="flex justify-between items-center w-full mb-8 px-2">
                     <div className="flex items-center gap-2 bg-orange-100 dark:bg-orange-900/30 px-4 py-2 rounded-full text-orange-600 dark:text-orange-400 font-bold shadow-sm">
@@ -809,9 +848,18 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                     <div className="text-2xl font-black text-black dark:text-white">{score}</div>
                 </div>
 
-                {isGameOver ? (
-                    <GameOverModal title="Süre Bitti" score={score} xp={score} onRestart={init} onExit={() => setActiveGame('none')} />
-                ) : (
+                {isGameOver && (
+                    <GameOverModal 
+                        isWin={score > 60}
+                        title={score > 60 ? "Hız Rekoru!" : "Zamana Yenildin"}
+                        score={score} 
+                        xp={score > 60 ? score : -10} 
+                        onRestart={init} 
+                        onExit={() => setActiveGame('none')} 
+                    />
+                )}
+                
+                {!isGameOver && (
                     <div className="w-full">
                         <div className="text-center mb-8 relative">
                             {combo > 1 && (
@@ -846,11 +894,13 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
 
     // --- AUDIO CHALLENGE RENDER ---
     const AudioQuizGame = () => {
-        const { currentWord, options, score, lives, isGameOver, handleAnswer, playAudio, init } = useAudioQuiz(words, (s) => onAddXP(s));
+        const { currentWord, options, score, lives, isGameOver, handleAnswer, playAudio, init } = useAudioQuiz(words, (s, isWin) => {
+            onAddXP(isWin ? s : -10);
+        });
 
         return (
-            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in relative max-w-sm mx-auto">
-                <button onClick={() => { onAddXP(score); setActiveGame('none'); }} className="absolute top-4 left-4 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full"><ArrowLeft size={20} className="text-black dark:text-white"/></button>
+            <div className="flex flex-col items-center justify-center h-full p-6 animate-fade-in relative max-w-sm mx-auto overflow-hidden">
+                <button onClick={() => setActiveGame('none')} className="absolute top-4 left-4 p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full z-10"><ArrowLeft size={20} className="text-black dark:text-white"/></button>
                 
                 <div className="flex justify-between items-center w-full mb-8 px-2">
                     <div className="flex gap-1">
@@ -861,9 +911,18 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                     <div className="text-2xl font-black text-black dark:text-white">{score}</div>
                 </div>
 
-                {isGameOver ? (
-                    <GameOverModal title="Oyun Bitti" score={score} xp={score} onRestart={init} onExit={() => setActiveGame('none')} />
-                ) : (
+                {isGameOver && (
+                    <GameOverModal 
+                        isWin={score >= 40}
+                        title={score >= 40 ? "Keskin Kulaklar!" : "Hatalı Duyum"}
+                        score={score} 
+                        xp={score >= 40 ? score : -10} 
+                        onRestart={init} 
+                        onExit={() => setActiveGame('none')} 
+                    />
+                )}
+                
+                {!isGameOver && (
                     <div className="w-full text-center">
                         <button 
                             onClick={() => currentWord && playAudio(currentWord.term)}
@@ -897,15 +956,15 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
             <div className="h-full overflow-y-auto px-6 pt-12 pb-28 scrollbar-hide">
                 <header className="flex justify-between items-center mb-8">
                     <div>
-                        <h2 className="text-3xl font-black text-black dark:text-white">Liderlik</h2>
+                        <h2 className="text-3xl font-black text-black dark:text-white">Arena Liderleri</h2>
                         <p className="text-zinc-500">En iyiler listesi</p>
                     </div>
-                    <button onClick={() => setActiveTab('menu')} className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white"><ArrowLeft /></button>
+                    <button onClick={() => setActiveTab('menu')} className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white transition-colors hover:bg-zinc-200"><ArrowLeft /></button>
                 </header>
                 
                 <div className="space-y-3">
                      {leaderboardData?.map((entry) => (
-                         <div key={entry.id} className={`flex items-center gap-4 p-4 rounded-2xl border ${entry.isCurrentUser ? 'bg-black text-white dark:bg-white dark:text-black border-transparent' : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 text-black dark:text-white'}`}>
+                         <div key={entry.id} className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${entry.isCurrentUser ? 'bg-black text-white dark:bg-white dark:text-black border-transparent scale-[1.02] shadow-xl' : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 text-black dark:text-white shadow-sm'}`}>
                              <div className="font-bold font-mono text-lg w-8 text-center">{entry.rank}</div>
                              <div className="text-2xl">{entry.avatar}</div>
                              <div className="flex-1 font-bold">{entry.name}</div>
@@ -913,7 +972,10 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                          </div>
                      ))}
                      {!leaderboardData?.length && (
-                         <div className="text-center py-10 text-zinc-400">Yükleniyor...</div>
+                         <div className="text-center py-20">
+                             <div className="animate-spin mb-4 flex justify-center"><RotateCcw size={32} className="text-zinc-300" /></div>
+                             <p className="text-zinc-400 font-medium">Liderlik tablosu yükleniyor...</p>
+                         </div>
                      )}
                 </div>
             </div>
@@ -935,8 +997,8 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
         <div className="h-full flex flex-col px-6 pt-12 pb-28 overflow-y-auto scrollbar-hide bg-zinc-50 dark:bg-zinc-950">
             <header className="mb-8 flex justify-between items-start">
                 <div>
-                    <h2 className="text-4xl font-black text-black dark:text-white tracking-tighter mb-2">Oyun Alanı</h2>
-                    <p className="text-zinc-500 font-medium">Öğrenirken eğlen.</p>
+                    <h2 className="text-4xl font-black text-black dark:text-white tracking-tighter mb-2">Arena</h2>
+                    <p className="text-zinc-500 font-medium">Eğlenirken XP kazan veya kaybet.</p>
                 </div>
                 <button 
                     onClick={() => setActiveTab('leaderboard')}
@@ -947,7 +1009,6 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
             </header>
 
             <div className="grid grid-cols-1 gap-4 pb-6">
-                {/* 1. Hangman */}
                 <button 
                     onClick={() => setActiveGame('hangman')}
                     className="relative overflow-hidden group bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] text-left border border-zinc-200 dark:border-zinc-800 shadow-sm hover:shadow-xl transition-all"
@@ -960,11 +1021,10 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                             <BrainCircuit size={24} />
                         </div>
                         <h3 className="text-xl font-bold text-black dark:text-white mb-1">Adam Asmaca</h3>
-                        <p className="text-zinc-500 text-xs font-medium">Kelimeyi tahmin et, puanları topla.</p>
+                        <p className="text-zinc-500 text-xs font-medium">Bilemezsen XP kaybedersin!</p>
                     </div>
                 </button>
 
-                {/* 2. Scramble */}
                 <button 
                     onClick={() => setActiveGame('scramble')}
                     className="relative overflow-hidden group bg-gradient-to-br from-orange-500 to-red-600 p-6 rounded-[2.5rem] text-left shadow-lg hover:shadow-orange-500/30 transition-all"
@@ -977,11 +1037,10 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                             <Shuffle size={24} />
                         </div>
                         <h3 className="text-xl font-bold text-white mb-1">Kelime Karıştırma</h3>
-                        <p className="text-orange-100 text-xs font-medium">Karışık harfleri sıraya diz.</p>
+                        <p className="text-orange-100 text-xs font-medium">60 saniyede kaç kelime?</p>
                     </div>
                 </button>
 
-                {/* 3. Snake */}
                 <button 
                     onClick={() => setActiveGame('snake')}
                     className="relative overflow-hidden group bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] text-left border border-zinc-200 dark:border-zinc-800 shadow-sm hover:shadow-xl transition-all"
@@ -994,11 +1053,10 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                             <Grid size={24} />
                         </div>
                         <h3 className="text-xl font-bold text-black dark:text-white mb-1">Yılan - Hecele</h3>
-                        <p className="text-zinc-500 text-xs font-medium">Yemleri ye, kelimeyi tamamla.</p>
+                        <p className="text-zinc-500 text-xs font-medium">Duvara çarparsan XP gider.</p>
                     </div>
                 </button>
 
-                {/* 4. Memory */}
                 <button 
                     onClick={() => setActiveGame('memory')}
                     className="relative overflow-hidden group bg-gradient-to-br from-blue-500 to-indigo-600 p-6 rounded-[2.5rem] text-left shadow-lg hover:shadow-blue-500/30 transition-all"
@@ -1011,12 +1069,11 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                             <Sparkles size={24} />
                         </div>
                         <h3 className="text-xl font-bold text-white mb-1">Hafıza Kartları</h3>
-                        <p className="text-blue-100 text-xs font-medium">Kelimeleri ve anlamlarını eşleştir.</p>
+                        <p className="text-blue-100 text-xs font-medium">En az hamlede bitir.</p>
                     </div>
                 </button>
 
                 <div className="grid grid-cols-2 gap-4">
-                    {/* 5. Speed */}
                     <button 
                         onClick={() => setActiveGame('speed')}
                         className="relative overflow-hidden group bg-white dark:bg-zinc-900 p-5 rounded-[2rem] text-left border border-zinc-200 dark:border-zinc-800 shadow-sm hover:shadow-lg transition-all"
@@ -1025,10 +1082,9 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                             <Zap size={20} />
                         </div>
                         <h3 className="text-sm font-bold text-black dark:text-white mb-1">Hızlı Cevap</h3>
-                        <p className="text-zinc-500 text-[10px] font-medium">Zamana karşı yarış.</p>
+                        <p className="text-zinc-500 text-[10px] font-medium">Zaman biterse -10 XP.</p>
                     </button>
 
-                    {/* 6. Audio */}
                     <button 
                         onClick={() => setActiveGame('audio')}
                         className="relative overflow-hidden group bg-white dark:bg-zinc-900 p-5 rounded-[2rem] text-left border border-zinc-200 dark:border-zinc-800 shadow-sm hover:shadow-lg transition-all"
@@ -1037,7 +1093,7 @@ export const Games: React.FC<GamesProps> = ({ userProfile, words, onAddXP, leade
                             <Headphones size={20} />
                         </div>
                         <h3 className="text-sm font-bold text-black dark:text-white mb-1">Dinleme</h3>
-                        <p className="text-zinc-500 text-[10px] font-medium">Duyduğunu bul.</p>
+                        <p className="text-zinc-500 text-[10px] font-medium">3 canın var.</p>
                     </button>
                 </div>
             </div>

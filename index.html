@@ -5,19 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>MemoLingua</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- GOOGLE ADSENSE SCRIPT -->
-    <!-- Bu script reklamların çalışması için zorunludur. -->
-    <!-- ca-pub-XXXXXXXXXXXXXXXX kısmını kendi yayıncı kimliğinle değiştireceksin -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
     
     <script>
-      // Polyfill process.env for browser environment to prevent ReferenceErrors
       window.process = {
         env: {
           NODE_ENV: 'development',
-          // Attempt to use the injected variable if available, otherwise default to empty.
-          // NOTE: Do not hardcode API keys here in production.
-          API_KEY: (() => { try { return process.env.API_KEY || '' } catch(e) { return '' } })(),
+          API_KEY: (function() { try { return String(process.env.API_KEY || ''); } catch(e) { return ''; } })(),
           FIREBASE_API_KEY: 'AIzaSyCbHFt-2mkzs24ASj_pDpw8Euo6JJeKCBk',
           FIREBASE_AUTH_DOMAIN: 'fitback-184bd.firebaseapp.com',
           FIREBASE_PROJECT_ID: 'fitback-184bd',
@@ -32,11 +26,11 @@
         theme: {
           extend: {
             colors: {
-              primary: '#09090b', // Zinc 950 (Black-ish)
-              secondary: '#71717a', // Zinc 500
-              background: '#f4f4f5', // Zinc 100
+              primary: '#09090b',
+              secondary: '#71717a',
+              background: '#f4f4f5',
               surface: '#ffffff',
-              accent: '#2563eb', // Modern Blue
+              accent: '#2563eb',
               success: '#16a34a',
               warning: '#ca8a04',
               error: '#dc2626',
@@ -71,47 +65,36 @@
     </script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-      
       body {
         font-family: 'Inter', sans-serif;
         -webkit-tap-highlight-color: transparent;
         overscroll-behavior-y: none;
-        /* iOS Safe Area Support */
         padding-top: env(safe-area-inset-top);
         padding-bottom: env(safe-area-inset-bottom);
         padding-left: env(safe-area-inset-left);
         padding-right: env(safe-area-inset-right);
       }
-      
-      /* Hide scrollbar for Chrome, Safari and Opera */
-      .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-      }
-
-      /* Hide scrollbar for IE, Edge and Firefox */
-      .scrollbar-hide {
-          -ms-overflow-style: none;  /* IE and Edge */
-          scrollbar-width: none;  /* Firefox */
-      }
+      .scrollbar-hide::-webkit-scrollbar { display: none; }
+      .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-    "firebase/analytics": "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js",
-    "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
-    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
-    "@capacitor/cli": "https://aistudiocdn.com/@capacitor/cli@^7.4.4"
-  }
-}
-</script>
-</head>
+    <script type="importmap">
+    {
+      "imports": {
+        "react/": "https://aistudiocdn.com/react@^19.2.0/",
+        "react": "https://aistudiocdn.com/react@^19.2.0",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+        "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+        "firebase/analytics": "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
+        "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
+        "@capacitor/cli": "https://aistudiocdn.com/@capacitor/cli@^7.4.4"
+      }
+    }
+    </script>
+  </head>
   <body class="bg-background dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 h-screen w-screen overflow-hidden selection:bg-black selection:text-white transition-colors duration-300">
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>

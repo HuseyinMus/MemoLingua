@@ -1,80 +1,187 @@
+
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { WordData, UserLevel, UserGoal, GeneratedStory, ChatMessage } from "../types";
+import { WordData, UserLevel, UserGoal, GeneratedStory, ChatMessage, WritingFeedback, VoiceSession } from "../types";
 
-// Robustly get API Key from various sources
-const getApiKey = (): string => {
-    let key = '';
-
-    // 1. Try standard process.env (Node/Webpack/Parcel replacement)
-    try {
-        // @ts-ignore
-        if (typeof process !== 'undefined' && process.env?.API_KEY) {
-            // @ts-ignore
-            key = process.env.API_KEY;
-        }
-    } catch(e) {}
-
-    // 2. Try Vite-style import.meta.env (Common in Vercel/modern builds)
-    if (!key) {
-        try {
-            // @ts-ignore
-            if (typeof import.meta !== 'undefined' && import.meta.env) {
-                // @ts-ignore
-                if (import.meta.env.API_KEY) key = import.meta.env.API_KEY;
-                // @ts-ignore
-                else if (import.meta.env.VITE_API_KEY) key = import.meta.env.VITE_API_KEY;
-                // @ts-ignore
-                else if (import.meta.env.NEXT_PUBLIC_API_KEY) key = import.meta.env.NEXT_PUBLIC_API_KEY;
-            }
-        } catch (e) {}
-    }
-
-    // 3. Try window.process polyfill (Runtime polyfill from index.html)
-    if (!key && typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) {
-        key = (window as any).process.env.API_KEY;
-    }
-    
-    if (!key) {
-        console.warn("Gemini API Key is missing! AI features will not work.");
-    }
-    return key;
-};
-
-// Lazy initialization to prevent app crash if key is missing on load
-let aiInstance: GoogleGenAI | null = null;
-const getAi = () => {
-    if (!aiInstance) {
-        const apiKey = getApiKey();
-        if (!apiKey) {
-            throw new Error("API Key is missing. If you are on Vercel, try naming it 'VITE_API_KEY' or 'NEXT_PUBLIC_API_KEY'.");
-        }
-        aiInstance = new GoogleGenAI({ apiKey });
-    }
-    return aiInstance;
-};
-
-const modelId = "gemini-2.5-flash";
+const modelId = "gemini-3-flash-preview";
 const ttsModelId = "gemini-2.5-flash-preview-tts";
 
-export const generateSingleWord = async (term: string, level: UserLevel): Promise<WordData> => {
+const getAi = () => {
+    return new GoogleGenAI({ apiKey: String(process.env.API_KEY || '') });
+};
+
+const VOCAB_SYSTEM_INSTRUCTION = "You are a specialized English language tutor. When generating vocabulary cards, ALWAYS provide the 'translation' field in Turkish. Definitions should be in clear, simple English. Example sentences should be natural and contextually rich.";
+
+function decode(base64: string) {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
+
+const sanitizeWord = (w: any): WordData => ({
+    id: w.id || crypto.randomUUID(),
+    term: String(w.term || ''),
+    translation: String(w.translation || ''),
+    definition: String(w.definition || ''),
+    exampleSentence: String(w.exampleSentence || ''),
+    pronunciation: String(w.pronunciation || ''),
+    phoneticSpelling: String(w.phoneticSpelling || ''),
+    type: String(w.type || 'noun'),
+});
+
+export const summarizeVoiceSession = async (transcript: ChatMessage[], level: UserLevel): Promise<NonNullable<VoiceSession['analysis']>> => {
     const ai = getAi();
-    const prompt = `Generate a detailed vocabulary card for the English word "${term}" suitable for a student at '${level}' level.
+    const conversationText = transcript.map(t => `${t.role === 'user' ? 'Student' : 'Tutor'}: ${t.text}`).join('\n');
     
-    Provide:
-    - term: The English word (corrected if misspelled)
-    - translation: Turkish translation
-    - definition: A simple English definition
-    - exampleSentence: An example sentence using the word
-    - type: Part of speech (noun, verb, etc.)
-    - pronunciation: IPA pronunciation
-    - phoneticSpelling: A simple phonetic reading (e.g. "sked-yool")
+    const prompt = `Analyze this English conversation. Student Level: ${level}.
+    Transcript:
+    ${conversationText}
     
-    Return a strict JSON object.`;
+    Return JSON format in Turkish for grammarFeedback and suggestions. 
+    - fluencyScore: 0 to 100
+    - grammarFeedback: Key points to improve.
+    - vocabularyUsed: Notable advanced words used.
+    - suggestions: 3 specific tips.`;
 
     const response = await ai.models.generateContent({
         model: modelId,
         contents: prompt,
         config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    fluencyScore: { type: Type.NUMBER },
+                    grammarFeedback: { type: Type.STRING },
+                    vocabularyUsed: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    suggestions: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["fluencyScore", "grammarFeedback", "vocabularyUsed", "suggestions"]
+            }
+        }
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+    return {
+        fluencyScore: Number(parsed.fluencyScore || 0),
+        grammarFeedback: String(parsed.grammarFeedback || ''),
+        vocabularyUsed: Array.isArray(parsed.vocabularyUsed) ? parsed.vocabularyUsed.map(String) : [],
+        suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.map(String) : []
+    };
+};
+
+export const evaluateWriting = async (text: string, level: UserLevel): Promise<WritingFeedback> => {
+    const ai = getAi();
+    const prompt = `Evaluate the following English text written by a ${level} level student. Analyze grammar, vocabulary, and flow. Text: "${text}" Return JSON format. Use Turkish for feedback and suggestions.`;
+
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: prompt,
+        config: {
+            systemInstruction: "You are an English writing evaluator. Provide feedback in Turkish.",
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    score: { type: Type.NUMBER },
+                    cefrLevel: { type: Type.STRING },
+                    feedback: { type: Type.STRING },
+                    corrections: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                original: { type: Type.STRING },
+                                corrected: { type: Type.STRING },
+                                reason: { type: Type.STRING }
+                            },
+                            required: ["original", "corrected", "reason"]
+                        }
+                    },
+                    suggestions: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING }
+                    }
+                },
+                required: ["score", "cefrLevel", "feedback", "corrections", "suggestions"]
+            }
+        }
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+    return {
+        score: Number(parsed.score || 0),
+        cefrLevel: String(parsed.cefrLevel || ''),
+        feedback: String(parsed.feedback || ''),
+        corrections: Array.isArray(parsed.corrections) ? parsed.corrections.map((c: any) => ({
+            original: String(c.original || ''),
+            corrected: String(c.corrected || ''),
+            reason: String(c.reason || '')
+        })) : [],
+        suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.map(String) : []
+    };
+};
+
+export const getWordDeepDive = async (word: string, level: UserLevel): Promise<Partial<WordData>> => {
+    const ai = getAi();
+    const prompt = `Provide a deep dive into the English word "${word}". Include a memory hook (mnemonic) in Turkish, a visual scene description in Turkish, and its origin (etymology) in Turkish. Return JSON.`;
+
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: prompt,
+        config: {
+            systemInstruction: "Provide deep dive information in Turkish.",
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    mnemonic: { type: Type.STRING },
+                    visualScene: { type: Type.STRING },
+                    origin: { type: Type.STRING }
+                },
+                required: ["mnemonic", "visualScene", "origin"]
+            }
+        }
+    });
+    const parsed = JSON.parse(response.text || '{}');
+    return {
+        mnemonic: String(parsed.mnemonic || ''),
+        visualScene: String(parsed.visualScene || ''),
+        origin: String(parsed.origin || '')
+    };
+};
+
+export const generateSingleWord = async (term: string, level: UserLevel): Promise<WordData> => {
+    const ai = getAi();
+    const prompt = `Generate a detailed vocabulary card for the English word "${term}" suitable for a student at '${level}' level. The 'translation' MUST be in Turkish. The 'definition' should be English.`;
+
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: prompt,
+        config: {
+            systemInstruction: VOCAB_SYSTEM_INSTRUCTION,
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
@@ -92,111 +199,84 @@ export const generateSingleWord = async (term: string, level: UserLevel): Promis
         }
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No response");
-
-    try {
-        const cleanText = text.replace(/```json/g, '').replace(/```/g, '');
-        const data = JSON.parse(cleanText);
-        return { ...data, id: crypto.randomUUID() };
-    } catch (e) {
-        console.error("JSON Parse Error", e);
-        throw new Error("Failed to parse AI response");
-    }
+    return sanitizeWord(JSON.parse(response.text || '{}'));
 };
 
-export const generateMnemonic = async (term: string, definition: string, translation: string): Promise<string> => {
+export const extractVocabularyFromImage = async (base64Image: string, level: UserLevel): Promise<WordData[]> => {
     const ai = getAi();
-    const prompt = `Create a short, memorable, and creative mnemonic aid (memory hook) for the English word "${term}" (Turkish: ${translation}).
-    Definition: ${definition}.
-    
-    The mnemonic can be:
-    1. A rhyme.
-    2. A visual association.
-    3. A funny connection between the English sound and Turkish meaning.
-    
-    Keep it under 25 words. Return ONLY the string.`;
-
     const response = await ai.models.generateContent({
         model: modelId,
-        contents: prompt,
-    });
-    
-    return response.text?.trim() || "No hint available.";
-};
-
-export const generateRoleplayResponse = async (
-    scenarioTitle: string,
-    history: ChatMessage[],
-    userLevel: string
-): Promise<{ text: string; correction?: string }> => {
-    const ai = getAi();
-    const chatHistory = history.map(h => `${h.sender === 'user' ? 'Student' : 'You'}: ${h.text}`).join('\n');
-    const lastUserMessage = history[history.length - 1]?.text || "";
-
-    const prompt = `You are a roleplay partner in a '${scenarioTitle}' scenario. The user is an English student (Level ${userLevel}).
-    
-    Chat History:
-    ${chatHistory}
-    
-    Task:
-    1. Respond naturally to the student's last message ("${lastUserMessage}") to keep the conversation going. Keep it concise (max 2 sentences).
-    2. Analyze the student's last message for grammar or naturalness errors.
-    
-    Return JSON:
-    {
-      "response": "Your response here",
-      "correction": "Optional correction if they made a mistake (e.g., 'Better way to say it: ...'). If perfect, return null."
-    }`;
-
-    const response = await ai.models.generateContent({
-        model: modelId,
-        contents: prompt,
+        contents: { 
+            parts: [
+                { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+                { text: `Identify 5 English vocabulary words related to this image for a ${level} student. Ensure 'translation' is Turkish.` }
+            ] 
+        },
         config: {
+            systemInstruction: VOCAB_SYSTEM_INSTRUCTION,
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        term: { type: Type.STRING },
+                        translation: { type: Type.STRING },
+                        definition: { type: Type.STRING },
+                        exampleSentence: { type: Type.STRING },
+                        pronunciation: { type: Type.STRING },
+                        phoneticSpelling: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                    },
+                    required: ["term", "translation", "definition", "exampleSentence", "pronunciation", "phoneticSpelling", "type"],
+                }
+            }
+        }
+    });
+
+    const parsed = JSON.parse(response.text || '[]');
+    return Array.isArray(parsed) ? parsed.map(sanitizeWord) : [];
+};
+
+export const generateVisualMnemonic = async (term: string, translation: string): Promise<string> => {
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: `Create a short visual scene in Turkish to help remember "${term}" (Turkish: ${translation}).`,
+        config: { systemInstruction: "You are a memory expert. Provide visual descriptions in Turkish." }
+    });
+    return String(response.text || "Görsel ipucu oluşturulamadı.").trim();
+};
+
+export const correctUserSentence = async (term: string, userSentence: string): Promise<{ isCorrect: boolean; feedback: string }> => {
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: `Term: "${term}", Sentence: "${userSentence}". Check correctness. Feedback in Turkish.`,
+        config: {
+            systemInstruction: "Provide feedback in Turkish about the user's sentence.",
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                    response: { type: Type.STRING },
-                    correction: { type: Type.STRING, nullable: true },
+                    isCorrect: { type: Type.BOOLEAN },
+                    feedback: { type: Type.STRING }
                 },
-                required: ["response"]
+                required: ["isCorrect", "feedback"]
             }
         }
     });
-
-    try {
-        const cleanText = response.text?.replace(/```json/g, '').replace(/```/g, '');
-        if (!cleanText) throw new Error("Empty response");
-        const data = JSON.parse(cleanText);
-        return { text: data.response, correction: data.correction };
-    } catch (e) {
-        console.error("Roleplay Error", e);
-        return { text: "I didn't catch that. Could you say it again?" };
-    }
+    const parsed = JSON.parse(response.text || '{"isCorrect":false, "feedback":"Hata"}');
+    return { isCorrect: !!parsed.isCorrect, feedback: String(parsed.feedback || '') };
 };
 
 export const generateDailyBatch = async (count: number, level: UserLevel, goal: UserGoal, existingWords: string[]): Promise<WordData[]> => {
     const ai = getAi();
-    const prompt = `Generate exactly ${count} unique English vocabulary words for a student at '${level}' level who is interested in '${goal}'.
-    
-    Do NOT include these words: ${existingWords.slice(0, 50).join(', ')}.
-    
-    For each word, provide:
-    - term: The English word
-    - translation: Turkish translation
-    - definition: A simple English definition suitable for ${level} level
-    - exampleSentence: An example sentence related to '${goal}' context
-    - type: Part of speech (noun, verb, adj...)
-    - pronunciation: IPA pronunciation
-    - phoneticSpelling: A simple phonetic reading for beginners (e.g. "sked-yool")
-    
-    Return a strict JSON array of objects.`;
-
     const response = await ai.models.generateContent({
         model: modelId,
-        contents: prompt,
+        contents: `Generate exactly ${count} unique English words for ${level} level and '${goal}' goal. Not in: ${existingWords.slice(0, 30).join(',')}. TRANSLATION MUST BE TURKISH.`,
         config: {
+            systemInstruction: VOCAB_SYSTEM_INSTRUCTION,
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.ARRAY,
@@ -216,122 +296,55 @@ export const generateDailyBatch = async (count: number, level: UserLevel, goal: 
             }
         }
     });
-
-    const text = response.text;
-    if (!text) throw new Error("No response");
-
-    try {
-        const cleanText = text.replace(/```json/g, '').replace(/```/g, '');
-        const list = JSON.parse(cleanText);
-        return list.map((item: any) => ({ ...item, id: crypto.randomUUID() }));
-    } catch (e) {
-        console.error("JSON Parse Error", e);
-        throw new Error("Failed to parse AI response");
-    }
+    const parsed = JSON.parse(response.text || '[]');
+    return Array.isArray(parsed) ? parsed.map(sanitizeWord) : [];
 };
 
-export const generatePhrasalVerbBatch = async (
-    count: number, 
-    level: UserLevel, 
-    baseVerb: string, 
-    mode: 'formal' | 'informal', 
-    existingWords: string[]
-): Promise<WordData[]> => {
+export const generateAudio = async (text: string): Promise<string> => {
     const ai = getAi();
-    
-    let promptContext = "";
-    if (mode === 'informal') {
-        promptContext = `Generate ${count} INFORMAL/CASUAL Phrasal Verbs derived from the verb "${baseVerb}". These should be commonly used in daily conversation, street talk, or with friends.`;
-    } else {
-        promptContext = `Generate ${count} FORMAL/BUSINESS Phrasal Verbs derived from the verb "${baseVerb}" (or related high-level verbs). Focus on phrasal verbs used in professional, academic, or workplace settings.`;
-    }
-
-    const prompt = `${promptContext}
-    
-    Do NOT include these words: ${existingWords.slice(0, 50).join(', ')}.
-    
-    For each word, provide:
-    - term: The Phrasal Verb (e.g., "Carry out")
-    - translation: Turkish translation
-    - definition: A clear definition. IMPORTANT: For FORMAL verbs, include the single-word formal synonym in parenthesis (e.g. "To do a task (Conduct)").
-    - exampleSentence: A sentence strictly matching the '${mode}' tone (Casual vs Business).
-    - type: 'phrasal verb'
-    - pronunciation: IPA
-    - phoneticSpelling: Simple phonetic
-    
-    Return a strict JSON array of objects.`;
-
     const response = await ai.models.generateContent({
-        model: modelId,
-        contents: prompt,
+        model: ttsModelId,
+        contents: [{ parts: [{ text }] }],
         config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        term: { type: Type.STRING },
-                        translation: { type: Type.STRING },
-                        definition: { type: Type.STRING },
-                        exampleSentence: { type: Type.STRING },
-                        pronunciation: { type: Type.STRING },
-                        phoneticSpelling: { type: Type.STRING },
-                        type: { type: Type.STRING },
-                    },
-                    required: ["term", "translation", "definition", "exampleSentence", "pronunciation", "phoneticSpelling", "type"],
-                }
-            }
-        }
+            responseModalities: [Modality.AUDIO],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+        },
     });
-
-    const text = response.text;
-    if (!text) throw new Error("No response");
-
-    try {
-        const cleanText = text.replace(/```json/g, '').replace(/```/g, '');
-        const list = JSON.parse(cleanText);
-        return list.map((item: any) => ({ ...item, id: crypto.randomUUID() }));
-    } catch (e) {
-        console.error("JSON Parse Error", e);
-        throw new Error("Failed to parse AI response");
-    }
+    const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64) throw new Error("Audio generation failed");
+    return String(base64);
 };
 
-// New Robust Story Generation
-export const generateContextualStory = async (level: UserLevel, goal: UserGoal): Promise<Omit<GeneratedStory, 'id' | 'date'>> => {
-    const ai = getAi();
-    const prompt = `Write a short, engaging story (approx 150 words) suitable for an English learner at ${level} level. 
-    The story theme should be related to: ${goal} (or general interesting fiction).
-    
-    Also, identify 5-7 key vocabulary words from the story and provide their details.
-    
-    Return JSON structure:
-    {
-      "title": "Story Title",
-      "genre": "Genre Name (e.g. Sci-Fi, Travel)",
-      "content": "Full story text...",
-      "vocabulary": [
-         { "term": "word", "translation": "turkish", "definition": "english def", "exampleSentence": "sentence from story", "type": "noun", "pronunciation": "IPA", "phoneticSpelling": "phonetic" }
-      ]
-    }`;
+export const playGeminiAudio = async (base64: string): Promise<void> => {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    const audioBuffer = await decodeAudioData(decode(base64), ctx, 24000, 1);
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(ctx.destination);
+    source.start();
+};
 
+export const generateContextualStory = async (level: UserLevel, topic: string): Promise<GeneratedStory> => {
+    const ai = getAi();
     const response = await ai.models.generateContent({
         model: modelId,
-        contents: prompt,
+        contents: `Write a short story (approx 150 words) for a ${level} level student about "${topic}". Also extract 5 key vocabulary words from the story. Return JSON format.`,
         config: {
+            systemInstruction: "You are a creative writer and language teacher. Provide content in English, but word translations in Turkish.",
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
                     title: { type: Type.STRING },
-                    genre: { type: Type.STRING },
                     content: { type: Type.STRING },
-                    vocabulary: { 
+                    genre: { type: Type.STRING },
+                    level: { type: Type.STRING },
+                    coverGradient: { type: Type.STRING },
+                    vocabulary: {
                         type: Type.ARRAY,
                         items: {
-                             type: Type.OBJECT,
-                             properties: {
+                            type: Type.OBJECT,
+                            properties: {
                                 term: { type: Type.STRING },
                                 translation: { type: Type.STRING },
                                 definition: { type: Type.STRING },
@@ -339,119 +352,73 @@ export const generateContextualStory = async (level: UserLevel, goal: UserGoal):
                                 pronunciation: { type: Type.STRING },
                                 phoneticSpelling: { type: Type.STRING },
                                 type: { type: Type.STRING },
-                             }
+                            },
+                            required: ["term", "translation", "definition", "exampleSentence", "pronunciation", "phoneticSpelling", "type"]
                         }
                     }
                 },
-                required: ["title", "genre", "content", "vocabulary"]
+                required: ["title", "content", "genre", "level", "coverGradient", "vocabulary"]
             }
         }
     });
-    
-    const text = response.text;
-    if (!text) throw new Error("Failed to generate story");
-    
-    try {
-        const cleanText = text.replace(/```json/g, '').replace(/```/g, '');
-        const result = JSON.parse(cleanText);
-        
-        // Assign IDs to vocabulary
-        const vocabulary = result.vocabulary.map((w: any) => ({ ...w, id: crypto.randomUUID() }));
-        
-        // Randomize cover gradient
-        const gradients = [
-            'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500',
-            'bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-500',
-            'bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500',
-            'bg-gradient-to-br from-orange-400 via-red-500 to-pink-500',
-            'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900',
-        ];
-        const randomGradient = gradients[Math.floor(Math.random() * gradients.length)];
 
-        return {
-            title: result.title,
-            content: result.content,
-            genre: result.genre,
-            level: level,
-            coverGradient: randomGradient,
-            vocabulary: vocabulary
-        };
-    } catch (e) {
-        console.error("Story Parse Error", e);
-        throw new Error("Failed to parse story response");
-    }
+    const parsed = JSON.parse(response.text || '{}');
+    return {
+        id: crypto.randomUUID(),
+        title: String(parsed.title || 'Untitled'),
+        content: String(parsed.content || ''),
+        genre: String(parsed.genre || 'General'),
+        level: String(parsed.level || level),
+        coverGradient: String(parsed.coverGradient || 'linear-gradient(to right, #6366f1, #a855f7)'),
+        date: Date.now(),
+        vocabulary: Array.isArray(parsed.vocabulary) ? parsed.vocabulary.map(sanitizeWord) : []
+    };
 };
 
-export const generateAudio = async (text: string): Promise<string | undefined> => {
-  try {
+export const generatePhrasalVerbBatch = async (count: number, level: UserLevel, baseVerb: string, mode: 'formal' | 'informal', existingWords: string[], topic: string = 'general'): Promise<WordData[]> => {
     const ai = getAi();
     const response = await ai.models.generateContent({
-      model: ttsModelId,
-      contents: {
-        parts: [{ text: text }]
-      },
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' },
-          },
-        },
-      },
+        model: modelId,
+        contents: `Generate exactly ${count} ${mode} phrasal verbs using "${baseVerb}" for ${level} level about ${topic}. Not in: ${existingWords.slice(0, 30).join(',')}. TRANSLATION MUST BE TURKISH.`,
+        config: {
+            systemInstruction: VOCAB_SYSTEM_INSTRUCTION,
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        term: { type: Type.STRING },
+                        translation: { type: Type.STRING },
+                        definition: { type: Type.STRING },
+                        exampleSentence: { type: Type.STRING },
+                        pronunciation: { type: Type.STRING },
+                        phoneticSpelling: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                    },
+                    required: ["term", "translation", "definition", "exampleSentence", "pronunciation", "phoneticSpelling", "type"],
+                }
+            }
+        }
     });
-    
-    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  } catch (error) {
-    console.warn("Audio generation failed:", error);
-    return undefined;
-  }
+    const parsed = JSON.parse(response.text || '[]');
+    return Array.isArray(parsed) ? parsed.map(sanitizeWord) : [];
 };
 
-let audioContext: AudioContext | null = null;
+export const generateRoleplayResponse = async (history: ChatMessage[], userMessage: string, level: UserLevel): Promise<string> => {
+    const ai = getAi();
+    const contents = history.map(h => ({
+        role: h.role === 'user' ? 'user' : 'model',
+        parts: [{ text: String(h.text || '') }]
+    }));
+    contents.push({ role: 'user', parts: [{ text: String(userMessage || '') }] });
 
-export const playGeminiAudio = async (base64String: string): Promise<void> => {
-    if (!base64String) throw new Error("No audio data provided");
-
-    // Check environment support
-    if (typeof window === 'undefined' || (!window.AudioContext && !(window as any).webkitAudioContext)) {
-        throw new Error("Web Audio API not supported");
-    }
-
-    try {
-        if (!audioContext) {
-            audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    const response = await ai.models.generateContent({
+        model: modelId,
+        contents: contents as any,
+        config: {
+            systemInstruction: `You are an English tutor. The student's level is ${level}. Converse naturally and correct errors.`
         }
-        
-        if (audioContext.state === 'suspended') {
-            await audioContext.resume();
-        }
-
-        const binaryString = atob(base64String);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        
-        const dataInt16 = new Int16Array(bytes.buffer);
-        const float32Data = new Float32Array(dataInt16.length);
-        for (let i = 0; i < dataInt16.length; i++) {
-            float32Data[i] = dataInt16[i] / 32768.0;
-        }
-
-        const buffer = audioContext.createBuffer(1, float32Data.length, 24000);
-        buffer.copyToChannel(float32Data, 0);
-
-        const source = audioContext.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioContext.destination);
-        source.start();
-        
-        return new Promise((resolve) => {
-            setTimeout(resolve, buffer.duration * 1000);
-        });
-    } catch (e) {
-        console.error("Audio playback error:", e);
-        throw new Error("Failed to play audio");
-    }
+    });
+    return String(response.text || "");
 };

@@ -1,5 +1,4 @@
 
-
 export interface WordData {
   id: string;
   term: string;
@@ -11,6 +10,16 @@ export interface WordData {
   type: string; // noun, verb, etc.
   audioBase64?: string; // AI Generated PCM Audio
   mnemonic?: string; // Memory aid hook
+  visualScene?: string; // AI Generated visual mnemonic
+  origin?: string; // Etymology or word history
+}
+
+export interface WritingFeedback {
+  score: number; // 0-100
+  cefrLevel: string; // A1-C2
+  feedback: string;
+  corrections: { original: string; corrected: string; reason: string }[];
+  suggestions: string[]; // Better vocabulary choices
 }
 
 export interface SRSState {
@@ -42,11 +51,12 @@ export enum AppView {
   PROFILE = 'PROFILE',
   GAMES = 'GAMES',
   SETTINGS = 'SETTINGS',
+  VOICE_TALK = 'VOICE_TALK',
+  COLLECTION = 'COLLECTION'
 }
 
 export type StudyMode = 'meaning' | 'context' | 'writing' | 'speaking' | 'translation';
 
-// User Profile Types
 export type UserLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 export type UserGoal = 'General English' | 'IELTS' | 'TOEFL' | 'SAT' | 'Business' | 'Travel';
 export type AppTheme = 'light' | 'dark' | 'system';
@@ -59,30 +69,30 @@ export interface Quest {
   progress: number;
   completed: boolean;
   rewardXP: number;
-  type: 'study_words' | 'play_games' | 'read_story' | 'add_words';
+  type: 'study_words' | 'play_games' | 'read_story' | 'add_words' | 'writing_lab';
 }
 
 export interface UserProfile {
-  uid?: string; // Firebase Auth ID
+  uid?: string;
   email?: string;
   username?: string;
-  avatar: string; // Selected Avatar Emoji
+  avatar: string;
   level: UserLevel;
   goal: UserGoal;
   hasCompletedOnboarding: boolean;
-  hasSeenTour: boolean; // For the tutorial system
+  hasSeenTour: boolean;
   dailyTarget: number;
-  studyTime: string; // Preferred study time (e.g. "09:00")
-  lastGeneratedDate: string; // To track auto-generation (prevent duplicates on same day)
+  studyTime: string;
+  lastGeneratedDate: string;
   wordsStudiedToday: number;
-  lastStudyDate: string; // Date string to track daily resets
-  xp: number; // Gamification Experience Points
-  streakFreeze: number; // Number of freezes available
-  streak: number; // Current streak
-  longestStreak: number; // Best streak
+  lastStudyDate: string;
+  xp: number;
+  streakFreeze: number;
+  streak: number;
+  longestStreak: number;
   league: UserLeague;
   theme: AppTheme;
-  quests?: Quest[]; // Daily quests
+  quests?: Quest[];
   lastQuestDate?: string;
   settings: {
     autoPlayAudio: boolean;
@@ -93,71 +103,44 @@ export interface UserProfile {
 
 export type UserLeague = 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond';
 
-export interface Achievement {
-  id: string;
-  title: string;
-  description: string;
-  icon: any;
-  unlocked: boolean;
-  progress: number;
-  maxProgress: number;
-  type?: 'streak' | 'xp' | 'count';
-}
-
 export interface GeneratedStory {
   id: string;
   title: string;
-  content: string; // Markdown/Text content
-  genre: string; // e.g., 'Sci-Fi', 'Mystery'
+  content: string;
+  genre: string;
   level: string;
-  coverGradient: string; // CSS class for gradient
+  coverGradient: string;
   date: number;
-  vocabulary: WordData[]; // Pre-generated vocabulary from the story
-}
-
-// Roleplay / Chat Types
-export interface ChatScenario {
-    id: string;
-    title: string;
-    description: string;
-    icon: string; // Emoji
-    initialMessage: string;
-    difficulty: 'Easy' | 'Medium' | 'Hard';
-    gradient: string;
+  vocabulary: WordData[];
 }
 
 export interface ChatMessage {
     id: string;
-    sender: 'user' | 'ai';
+    role: 'user' | 'ai';
     text: string;
-    correction?: string; // Optional grammar correction for user messages
+    correction?: string;
     timestamp: number;
 }
 
-// Gamification Types
+export interface VoiceSession {
+    id: string;
+    timestamp: number;
+    scenario: string;
+    duration: number; // saniye
+    transcript: ChatMessage[];
+    analysis?: {
+        fluencyScore: number;
+        grammarFeedback: string;
+        vocabularyUsed: string[];
+        suggestions: string[];
+    };
+}
+
 export interface LeaderboardEntry {
   id: string;
   name: string;
   xp: number;
-  avatar: string; // emoji or url
+  avatar: string;
   rank: number;
   isCurrentUser?: boolean;
-}
-
-export interface GameEvent {
-  id: string;
-  title: string;
-  description: string;
-  expiresIn: string;
-  type: 'challenge' | 'tournament' | 'boost';
-  color: string;
-}
-
-export interface GameMode {
-  id: string;
-  title: string;
-  description: string;
-  icon: any;
-  players: string;
-  status: 'active' | 'coming_soon';
 }
