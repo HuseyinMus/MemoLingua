@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { Search, Plus, Loader2, Sparkles, X, Check, Brain, Zap, ArrowRight, Camera, Image as ImageIcon, Briefcase, Plane, Book, Coffee, Globe, Hash, Volume2, Info, BookOpen, Lightbulb, ExternalLink, Languages } from 'lucide-react';
 import { UserLevel, WordData, UserProfile, UserWord } from '../types';
 import { generateSingleWord, extractVocabularyFromImage, generateDailyBatch, playGeminiAudio, generateAudio } from '../services/geminiService';
-import { Shimmer } from '../App';
+import { Shimmer } from './Shimmer';
 
 interface DiscoverProps {
     userProfile: UserProfile | null;
@@ -372,7 +372,7 @@ export const Discover: React.FC<DiscoverProps> = ({
                             </button>
                             <button 
                                 onClick={() => handleAddDiscoveredWord(previewWord)}
-                                className="flex-[2.5] py-5 bg-indigo-600 text-white font-black rounded-3xl text-xs uppercase tracking-widest shadow-xl shadow-indigo-500/30 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                                className="flex-[2.5] py-5 bg-indigo-600 text-white font-black rounded-3xl text-xs uppercase tracking-widest shadow-xl shadow-indigo-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
                             >
                                 <Plus size={18} /> Koleksiyonuma Ekle
                             </button>

@@ -17,12 +17,9 @@ import { Collection } from './components/Collection';
 import { Discover } from './components/Discover';
 import { Studio } from './components/Studio';
 import { Profile } from './components/Profile';
+import { Shimmer } from './components/Shimmer';
 
 import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Mic, BookMarked, BarChart3, Camera, Wand2, Plus, Command, Check } from 'lucide-react';
-
-export const Shimmer = ({ className = "" }: { className?: string }) => (
-    <div className={`animate-pulse bg-zinc-200 dark:bg-zinc-800 rounded-2xl ${className}`}></div>
-);
 
 const cleanProfile = (data: any): UserProfile => {
     if (!data) throw new Error("Profile data is missing");
@@ -299,7 +296,7 @@ export default function App() {
                     </button>
                 </div>
             )}
-            {view === AppView.VOICE_TALK && <VoiceTalk userProfile={userProfile} recentWords={words.slice(0, 5)} onBack={() => setView(AppView.DASHBOARD)} />}
+            {view === AppView.VOICE_TALK && <VoiceTalk userProfile={userProfile} recentWords={words.slice(0, 5)} onBack={() => setView(AppView.DASHBOARD)} onAddWords={handleAddWords} />}
             {view === AppView.DISCOVER && (
                 <Discover 
                     userProfile={userProfile} 

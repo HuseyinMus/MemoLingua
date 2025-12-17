@@ -42,8 +42,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const handleExportData = () => {
       try {
-          // Robust approach: Create a clean copy to prevent circular structure errors
-          // Often caused by internal Firebase/React objects injected into prototypes.
+          // Extremely robust approach: explicitly convert everything to primitive types
           const cleanProfile = userProfile ? {
               username: String(userProfile.username || ''),
               avatar: String(userProfile.avatar || ''),
@@ -62,7 +61,7 @@ export const Settings: React.FC<SettingsProps> = ({
               }
           } : null;
 
-          const cleanWords = words.map(w => ({
+          const cleanWords = Array.isArray(words) ? words.map(w => ({
               id: String(w.id),
               term: String(w.term),
               translation: String(w.translation),
@@ -77,7 +76,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   easeFactor: Number(w.srs?.easeFactor || 2.5),
                   streak: Number(w.srs?.streak || 0)
               }
-          }));
+          })) : [];
 
           const exportData = {
               profile: cleanProfile,
