@@ -1,15 +1,43 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Kullanıcıların kendi ana dokümanlarına ve tüm alt koleksiyonlarına (words, voiceSessions, settings vb.) tam erişimi
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    // --- YARDIMCI FONKSİYONLAR ---
+    
+    // Kullanıcının giriş yapıp yapmadığını kontrol eder
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Liderlik tablosu: Herkes okuyabilir, sadece sahibi kendi verisine yazabilir
+    // İşlem yapan kişinin, verinin sahibi olup olmadığını kontrol eder
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // --- KURALLAR ---
+
+    // 1. KULLANICI VERİLERİ (ÖZEL ALAN)
+    // Bu kural, 'users' koleksiyonundaki ana dokümanı VE onun altındaki 
+    // tüm alt koleksiyonları (words, history, voiceSessions, settings vb.) kapsar.
+    // {document=**} "recursive wildcard" sayesinde tek kural ile tüm alt yapıyı koruyoruz.
+    match /users/{userId}/{document=**} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // 2. LİDERLİK TABLOSU (YARI GENEL ALAN)
+    // Oyun/Arena modunda sıralamayı göstermek için kullanılır.
     match /leaderboard/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      // OKUMA: Giriş yapmış herhangi bir kullanıcı, sıralamayı görmek için 
+      // diğer kullanıcıların skorlarını okuyabilir.
+      allow read: if isSignedIn();
+      
+      // YAZMA: Bir kullanıcı sadece KENDİ skorunu veya bilgilerini güncelleyebilir.
+      // Başkasının skorunu değiştiremez.
+      allow write: if isOwner(userId);
+      
+      // İsteğe bağlı: Veri doğrulama eklenebilir (örn: XP negatif olamaz)
+      // allow write: if isOwner(userId) && request.resource.data.xp >= 0;
     }
   }
 }

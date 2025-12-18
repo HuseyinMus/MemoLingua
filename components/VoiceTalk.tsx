@@ -72,6 +72,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
     const streamRef = useRef<MediaStream | null>(null);
     const nextStartTimeRef = useRef<number>(0);
     const audioContextRef = useRef<AudioContext | null>(null);
+    const outputAudioContextRef = useRef<AudioContext | null>(null);
     const isStoppingRef = useRef(false);
 
     function encode(bytes: Uint8Array) {
@@ -108,6 +109,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
         const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
         const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         audioContextRef.current = inputCtx;
+        outputAudioContextRef.current = outputCtx;
         
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -230,9 +232,11 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
         try { sessionRef.current?.close(); } catch(e) {}
         streamRef.current?.getTracks().forEach(t => t.stop());
         
-        // Ensure AudioContext is not closed multiple times
         if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
             try { await audioContextRef.current.close(); } catch(e) {}
+        }
+        if (outputAudioContextRef.current && outputAudioContextRef.current.state !== 'closed') {
+            try { await outputAudioContextRef.current.close(); } catch(e) {}
         }
         
         setIsActive(false);

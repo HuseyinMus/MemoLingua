@@ -5,6 +5,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>MemoLingua</title>
+    <!-- Favicon Fix: Emoji as SVG to prevent 404 error -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
+    
+    <!-- Mobile Web App Capability -->
+    <meta name="theme-color" content="#09090b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
     
@@ -12,14 +20,6 @@
       window.process = {
         env: {
           NODE_ENV: 'development',
-          // Hem API_KEY hem de VITE_API_KEY kontrol edilir
-          API_KEY: (function() { 
-            try { 
-              return String(process.env.API_KEY || process.env.VITE_API_KEY || ''); 
-            } catch(e) { 
-              return ''; 
-            } 
-          })(),
           FIREBASE_API_KEY: 'AIzaSyCbHFt-2mkzs24ASj_pDpw8Euo6JJeKCBk',
           FIREBASE_AUTH_DOMAIN: 'fitback-184bd.firebaseapp.com',
           FIREBASE_PROJECT_ID: 'fitback-184bd',
