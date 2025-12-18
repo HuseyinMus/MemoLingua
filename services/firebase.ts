@@ -5,10 +5,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 // Access environment variables directly to support static analysis by bundlers (Vite/Webpack)
-// Dynamic access via variables (e.g. process.env[key]) often fails in production builds because 
-// bundlers replace the specific string "process.env.VITE_VAR" with the value.
-
-const apiKey = 
+const apiKeyEnv = 
   // @ts-ignore
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_API_KEY) || 
   // @ts-ignore
@@ -16,7 +13,7 @@ const apiKey =
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_API_KEY);
 
-const authDomain = 
+const authDomainEnv = 
   // @ts-ignore
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN) || 
   // @ts-ignore
@@ -24,7 +21,7 @@ const authDomain =
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_AUTH_DOMAIN);
 
-const projectId = 
+const projectIdEnv = 
   // @ts-ignore
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_PROJECT_ID) || 
   // @ts-ignore
@@ -32,7 +29,7 @@ const projectId =
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_PROJECT_ID);
 
-const storageBucket = 
+const storageBucketEnv = 
   // @ts-ignore
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET) || 
   // @ts-ignore
@@ -40,7 +37,7 @@ const storageBucket =
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_STORAGE_BUCKET);
 
-const messagingSenderId = 
+const messagingSenderIdEnv = 
   // @ts-ignore
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID) || 
   // @ts-ignore
@@ -48,7 +45,7 @@ const messagingSenderId =
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_MESSAGING_SENDER_ID);
 
-const appId = 
+const appIdEnv = 
   // @ts-ignore
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_APP_ID) || 
   // @ts-ignore
@@ -56,7 +53,7 @@ const appId =
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_APP_ID);
 
-const measurementId = 
+const measurementIdEnv = 
   // @ts-ignore
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID) || 
   // @ts-ignore
@@ -64,36 +61,31 @@ const measurementId =
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_MEASUREMENT_ID);
 
-const isDemo = !apiKey || !projectId;
-
-// Fallback to "demo" values if env vars are missing to prevent crash during development
-// This allows the app to load the UI even if Firebase connection fails later
+// Robust fallback configuration
+// If env vars are undefined OR empty strings, use the hardcoded values.
 const firebaseConfig = {
-  apiKey: apiKey || "demo-key",
-  authDomain: authDomain || "demo-project.firebaseapp.com",
-  projectId: projectId || "demo-project",
-  storageBucket: storageBucket || "demo-project.appspot.com",
-  messagingSenderId: messagingSenderId || "1234567890",
-  appId: appId || "1:1234567890:web:abcdef123456",
-  measurementId: measurementId || "G-DEMO"
+  apiKey: apiKeyEnv ? apiKeyEnv : "AIzaSyCbHFt-2mkzs24ASj_pDpw8Euo6JJeKCBk",
+  authDomain: authDomainEnv ? authDomainEnv : "fitback-184bd.firebaseapp.com",
+  projectId: projectIdEnv ? projectIdEnv : "fitback-184bd",
+  storageBucket: storageBucketEnv ? storageBucketEnv : "fitback-184bd.firebasestorage.app",
+  messagingSenderId: messagingSenderIdEnv ? messagingSenderIdEnv : "1067077343589",
+  appId: appIdEnv ? appIdEnv : "1:1067077343589:web:9c6b7286c308299eaee98c",
+  measurementId: measurementIdEnv ? measurementIdEnv : "G-W4YJ6VKQM3"
 };
-
-// Validate config logging only
-if (isDemo) {
-  console.warn("Firebase Config Warning: API keys missing. Using fallback demo values. Auth and Database features will not work.");
-}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Only initialize analytics if we have real keys, otherwise it throws "400 INVALID_ARGUMENT" immediately
-// because it tries to register the installation with an invalid API key.
 let analytics = null;
-if (!isDemo && typeof window !== 'undefined') {
+// Only initialize analytics in browser environment and try/catch to prevent API key errors from crashing the app
+if (typeof window !== 'undefined') {
   try {
-    analytics = getAnalytics(app);
+    // Check if measurementId is actually present before initializing
+    if (firebaseConfig.measurementId && firebaseConfig.measurementId !== "G-DEMO") {
+        analytics = getAnalytics(app);
+    }
   } catch (e) {
-    console.warn("Firebase Analytics failed to initialize", e);
+    console.warn("Firebase Analytics failed to initialize (this is often safe to ignore during development):", e);
   }
 }
 

@@ -104,7 +104,17 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
     const startSession = async () => {
         setIsConnecting(true);
         isStoppingRef.current = false;
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        
+        const apiKey = 
+          // @ts-ignore
+          (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_KEY) || 
+          // @ts-ignore
+          (typeof process !== 'undefined' && process.env?.VITE_API_KEY) ||
+          // @ts-ignore
+          (typeof process !== 'undefined' && process.env?.API_KEY) ||
+          "AIzaSyCpHO5HNsJb_Nq8pbhomSCFuIcCIxtfiP8";
+
+        const ai = new GoogleGenAI({ apiKey });
         
         const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
         const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });

@@ -18,10 +18,13 @@ const getAi = () => {
       // @ts-ignore
       (typeof process !== 'undefined' && process.env?.API_KEY);
 
-    if (!apiKey) {
+    // Hardcoded fallback for production/demo stability
+    const finalKey = apiKey || "AIzaSyCpHO5HNsJb_Nq8pbhomSCFuIcCIxtfiP8";
+
+    if (!finalKey) {
         console.error("Gemini API Key missing. Check .env for VITE_API_KEY");
     }
-    return new GoogleGenAI({ apiKey: apiKey || '' });
+    return new GoogleGenAI({ apiKey: finalKey });
 };
 
 function decode(base64: string) {

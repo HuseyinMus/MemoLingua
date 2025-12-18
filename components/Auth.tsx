@@ -139,14 +139,17 @@ export const Auth: React.FC<AuthProps> = ({ onLoginSuccess }) => {
             if (errorCode === 'auth/invalid-email') msg = "Geçersiz e-posta adresi.";
             else if (
                 errorCode === 'auth/user-not-found' || 
+                errorCode === 'auth/wrong-password' ||
                 errorCode === 'auth/invalid-credential' || 
-                errorCode === 'auth/invalid-login-credentials' || 
-                errorCode === 'auth/wrong-password'
+                errorCode === 'auth/invalid-login-credentials'
             ) {
                 msg = "E-posta veya şifre hatalı.";
             }
             else if (errorCode === 'auth/email-already-in-use') msg = "Bu e-posta adresi zaten kayıtlı.";
             else if (errorCode === 'auth/weak-password') msg = "Şifre çok zayıf.";
+            else if (errorCode === 'auth/api-key-not-valid.-please-pass-a-valid-api-key.') {
+                 msg = "API Anahtarı hatası. Lütfen geliştirici ile iletişime geçin.";
+            }
             else if (err.message) msg = err.message;
             
             setError(msg);
