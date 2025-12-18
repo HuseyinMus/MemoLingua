@@ -19,7 +19,7 @@ import { Studio } from './components/Studio';
 import { Profile } from './components/Profile';
 import { Shimmer } from './components/Shimmer';
 
-import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Mic, BookMarked, BarChart3, Camera, Wand2, Plus, Command, Check } from 'lucide-react';
+import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Mic, BookMarked, BarChart3, Camera, Wand2, Plus, Command, Check, Brain, Activity } from 'lucide-react';
 
 const cleanProfile = (data: any): UserProfile => {
     if (!data) throw new Error("Profile data is missing");
@@ -233,6 +233,28 @@ export default function App() {
       return 'meaning';
   }, [dueWords]);
 
+  const memoryHealth = useMemo(() => {
+    if (words.length === 0) return 0;
+    let totalScore = 0;
+    words.forEach(w => {
+        let score = 0;
+        if (w.srs.interval > 30) score = 100;
+        else if (w.srs.interval > 14) score = 90;
+        else if (w.srs.interval > 7) score = 75;
+        else if (w.srs.interval > 3) score = 50;
+        else if (w.srs.interval > 0) score = 30;
+        else score = 10;
+        
+        // Penalty for overdue
+        if (w.srs.nextReview < Date.now()) {
+            const overdueDays = (Date.now() - w.srs.nextReview) / (24 * 60 * 60 * 1000);
+            score = Math.max(0, score - (overdueDays * 10));
+        }
+        totalScore += score;
+    });
+    return Math.round(totalScore / words.length);
+  }, [words]);
+
   if (loadingAuth) return (
     <div className="h-screen w-screen flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-10 space-y-6">
         <div className="w-20 h-20 bg-black dark:bg-white rounded-[2rem] flex items-center justify-center animate-bounce shadow-2xl">
@@ -262,6 +284,33 @@ export default function App() {
                         </div>
                         <div className="bg-yellow-400 text-yellow-900 px-3 py-1 rounded-full text-[10px] font-black shadow-sm">XP {userProfile?.xp}</div>
                     </header>
+
+                    {/* Scientific Memory Health Widget */}
+                    <div className="bg-gradient-to-br from-zinc-900 to-black dark:from-zinc-800 dark:to-zinc-950 text-white p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden border border-zinc-800">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                        <div className="relative z-10 flex justify-between items-center">
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Brain size={18} className="text-indigo-400" />
+                                    <h3 className="text-sm font-black text-indigo-200 uppercase tracking-widest">Hafıza Sağlığı</h3>
+                                </div>
+                                <div className="text-5xl font-black tracking-tighter mb-2">%{memoryHealth}</div>
+                                <p className="text-[10px] text-zinc-400 font-medium max-w-[160px] leading-relaxed">
+                                    Bilimsel aralıklarla tekrar yaparak bu oranı %100'e yaklaştır.
+                                </p>
+                            </div>
+                            <div className="relative w-24 h-24 flex items-center justify-center">
+                                <svg className="w-full h-full -rotate-90">
+                                    <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-zinc-800" />
+                                    <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-indigo-500 transition-all duration-1000 ease-out" strokeDasharray={`${2 * Math.PI * 40}`} strokeDashoffset={`${2 * Math.PI * 40 * (1 - memoryHealth / 100)}`} strokeLinecap="round" />
+                                </svg>
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <Activity size={24} className="text-white" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="bg-black dark:bg-zinc-900 text-white p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group">
                         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                         <Sparkles className="absolute -right-6 -top-6 opacity-10 rotate-12" size={120} />

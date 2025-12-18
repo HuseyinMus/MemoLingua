@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, Sparkles, BookOpen, Lightbulb, Mic, Check, AlertCircle, Loader2, ImageIcon, Waves, X, Pencil, MessageCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Volume2, Sparkles, BookOpen, Lightbulb, Mic, Check, AlertCircle, Loader2, ImageIcon, Waves, X, Pencil, MessageCircle, Brain, Activity } from 'lucide-react';
 import { UserWord, StudyMode } from '../types';
 import { generateVisualMnemonic, correctUserSentence, generateAudio, playGeminiAudio } from '../services/geminiService';
 
@@ -96,17 +96,50 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
       } catch (e) {} finally { setIsChecking(false); }
   };
 
+  // Scientific Retention Calculation
+  const retention = useMemo(() => {
+      if (word.srs.interval === 0) return 0; // New
+      const dayMs = 24 * 60 * 60 * 1000;
+      const intervalMs = word.srs.interval * dayMs;
+      const reviewTime = word.srs.nextReview;
+      const lastReviewTime = reviewTime - intervalMs;
+      const elapsed = Date.now() - lastReviewTime;
+      
+      // Linear approximation: 100% -> 0% over 1.5x interval
+      const percentage = Math.max(0, 100 - ((elapsed / (intervalMs * 1.5)) * 100));
+      return Math.min(100, Math.round(percentage));
+  }, [word]);
+
+  const retentionColor = retention > 70 ? 'bg-green-500' : retention > 40 ? 'bg-yellow-500' : 'bg-red-500';
+
   return (
     <div className="relative w-full max-w-[320px] aspect-[3/4.6] mx-auto flex flex-col bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.15)] dark:shadow-black/50 border border-zinc-100 dark:border-zinc-800 overflow-hidden transition-all duration-500">
+       
+       {/* Scientific Header */}
+       <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-10">
+           <div className="flex items-center gap-1.5 px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-full">
+               {mode === 'meaning' && <Sparkles size={10} className="text-indigo-500" />}
+               {mode === 'writing' && <Pencil size={10} className="text-blue-500" />}
+               {mode === 'context' && <MessageCircle size={10} className="text-emerald-500" />}
+               <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{mode === 'meaning' ? word.type : mode}</span>
+           </div>
+           
+           <div className="flex flex-col items-end gap-1">
+               <div className="flex items-center gap-1.5">
+                   <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400">Hafıza</span>
+                   <div className="w-16 h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                       <div className={`h-full rounded-full transition-all duration-1000 ${retentionColor}`} style={{ width: `${retention}%` }}></div>
+                   </div>
+               </div>
+               {retention < 30 && (
+                   <span className="text-[9px] font-black text-red-500 animate-pulse">KRİTİK SEVİYE</span>
+               )}
+           </div>
+       </div>
+
        {/* Front Face */}
        <div className={`flex-1 flex flex-col p-6 ${showAnswer ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'} transition-all duration-300`}>
-           <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-full">
-                    {mode === 'meaning' && <Sparkles size={10} className="text-indigo-500" />}
-                    {mode === 'writing' && <Pencil size={10} className="text-blue-500" />}
-                    {mode === 'context' && <MessageCircle size={10} className="text-emerald-500" />}
-                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{mode === 'meaning' ? word.type : mode}</span>
-                </div>
+           <div className="mt-12 mb-6 text-right">
                 <button 
                     onClick={handleVisualHelp} 
                     className={`p-2 rounded-full border transition-all active:scale-90 ${visualMnemonic ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-zinc-200 dark:border-zinc-700 text-zinc-400'}`}
@@ -230,6 +263,21 @@ export const StudyCard: React.FC<StudyCardProps> = ({ word, mode, onResult, next
                                <p className="text-[9px] font-black uppercase tracking-widest">Cümle İçinde</p>
                            </div>
                            <p className="text-xs font-serif italic text-zinc-700 dark:text-zinc-300 leading-tight">"{word.exampleSentence}"</p>
+                       </div>
+
+                       {/* Scientific Insight Badge */}
+                       <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex items-center gap-3">
+                           <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center text-indigo-600">
+                               <Brain size={14} />
+                           </div>
+                           <div>
+                               <p className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">Bilimsel Görüş</p>
+                               <p className="text-[10px] text-indigo-800 dark:text-indigo-200 font-bold leading-tight">
+                                   {retention < 30 
+                                     ? "Tam zamanında! Bu kelime silinmek üzereydi." 
+                                     : "Hafızan güçlü. Tekrar aralığını uzatıyoruz."}
+                               </p>
+                           </div>
                        </div>
                    </div>
                </div>
