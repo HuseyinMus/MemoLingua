@@ -7,8 +7,30 @@ const ttsModelId = "gemini-2.5-flash-preview-tts";
 
 const VOCAB_SYSTEM_INSTRUCTION = "You are a specialized English language tutor. When generating vocabulary cards, ALWAYS provide the 'translation' field in Turkish. Definitions should be in clear, simple English. Example sentences should be natural and contextually rich.";
 
+const getEnv = (key: string) => {
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+    // @ts-ignore
+    return import.meta.env[key];
+  }
+   // @ts-ignore
+  if (typeof process !== 'undefined' && process.env) {
+      // @ts-ignore
+      if(process.env[key]) return process.env[key];
+      // @ts-ignore
+      const legacyKey = key.replace('VITE_', '');
+      // @ts-ignore
+      if(process.env[legacyKey]) return process.env[legacyKey];
+  }
+  return undefined;
+};
+
 const getAi = () => {
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = getEnv('VITE_API_KEY');
+    if (!apiKey) {
+        console.error("Gemini API Key missing. Check .env for VITE_API_KEY");
+    }
+    return new GoogleGenAI({ apiKey: apiKey || '' });
 };
 
 function decode(base64: string) {

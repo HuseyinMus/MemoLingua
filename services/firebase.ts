@@ -1,18 +1,46 @@
+
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// Fallback values are used if environment variables are missing (e.g. in local development or preview)
-const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY || "AIzaSyCbHFt-2mkzs24ASj_pDpw8Euo6JJeKCBk",
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN || "fitback-184bd.firebaseapp.com",
-  projectId: process.env.FIREBASE_PROJECT_ID || "fitback-184bd",
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "fitback-184bd.firebasestorage.app",
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "1067077343589",
-  appId: process.env.FIREBASE_APP_ID || "1:1067077343589:web:9c6b7286c308299eaee98c",
-  measurementId: process.env.FIREBASE_MEASUREMENT_ID || "G-W4YJ6VKQM3"
+// Helper to get env vars safely across different build environments (Vite, Webpack, etc.)
+const getEnv = (key: string) => {
+  // Check for Vite's import.meta.env
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+    // @ts-ignore
+    return import.meta.env[key];
+  }
+  
+  // Check for standard process.env (Webpack/Node)
+  // @ts-ignore
+  if (typeof process !== 'undefined' && process.env) {
+    // @ts-ignore
+    if (process.env[key]) return process.env[key];
+    // Fallback: check for the key without VITE_ prefix (e.g. if set in old Vercel envs)
+    const legacyKey = key.replace('VITE_', '');
+    // @ts-ignore
+    if (process.env[legacyKey]) return process.env[legacyKey];
+  }
+
+  return undefined;
 };
+
+const firebaseConfig = {
+  apiKey: getEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: getEnv('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: getEnv('VITE_FIREBASE_APP_ID'),
+  measurementId: getEnv('VITE_FIREBASE_MEASUREMENT_ID')
+};
+
+// Validate config to prevent crashing with obscure errors
+if (!firebaseConfig.projectId) {
+  console.error("Firebase Configuration Error: 'projectId' is missing. Please ensure your environment variables are set correctly in .env (starting with VITE_) or your build configuration.");
+}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
