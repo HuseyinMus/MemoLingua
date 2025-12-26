@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { BookOpen, Sparkles, Wand2, Plus, Volume2, Play, CheckCircle2, Loader2, ArrowRight, MessageSquare, ListCheck, Edit3, Send, Trophy, AlertCircle, X, Check, Layers, Languages, Coffee, Briefcase, Plane, ShoppingBag, HeartPulse } from 'lucide-react';
 import { UserLevel, GeneratedStory, WordData, WritingFeedback } from '../types';
 import { generateContextualStory, generatePhrasalVerbBatch, playGeminiAudio, generateAudio, evaluateWriting } from '../services/geminiService';
+import { audioManager } from '../services/audioManager';
 
 interface StudioProps {
     userLevel: UserLevel;
@@ -62,7 +63,7 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
             const feedback = await evaluateWriting(userText, userLevel);
             setWritingFeedback(feedback);
             onAddXP(Math.max(10, Math.floor(feedback.score / 2)));
-        } catch (e) {} finally { setIsEvaluating(false); }
+        } catch (e) { } finally { setIsEvaluating(false); }
     };
 
     const handleGenerateStory = async () => {
@@ -95,21 +96,19 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
         if (!activeStory || isPlaying) return;
         setIsPlaying(true);
         try {
-            const base64 = await generateAudio(activeStory.content);
-            if (base64) await playGeminiAudio(base64);
-        } catch (e) {} finally { setIsPlaying(false); }
+            await audioManager.speak(activeStory.content, { useAIFirst: true, timeout: 8000 });
+        } finally { setIsPlaying(false); }
     };
 
     const speakWord = async (text: string) => {
-        const base64 = await generateAudio(text);
-        if (base64) await playGeminiAudio(base64);
+        await audioManager.speak(text);
     };
 
     if (activeMode === 'writing') {
         return (
             <div className="h-full w-full bg-zinc-50 dark:bg-zinc-950 flex flex-col p-6 animate-fade-in overflow-y-auto scrollbar-hide pb-32">
                 <header className="pt-8 mb-6 flex items-center justify-between">
-                    <button onClick={() => setActiveMode('menu')} className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full"><ArrowRight className="rotate-180"/></button>
+                    <button onClick={() => setActiveMode('menu')} className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full"><ArrowRight className="rotate-180" /></button>
                     <h2 className="text-xl font-black">Yazma Atölyesi</h2>
                     <div className="w-10"></div>
                 </header>
@@ -121,40 +120,40 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
 
                 {!writingFeedback ? (
                     <div className="flex-1 flex flex-col">
-                        <textarea 
+                        <textarea
                             value={userText}
                             onChange={(e) => setUserText(e.target.value)}
                             placeholder="İngilizce yazmaya başla..."
                             className="flex-1 w-full bg-white dark:bg-zinc-900 rounded-[2rem] p-6 border-2 border-transparent focus:border-indigo-500 outline-none text-zinc-800 dark:text-zinc-200 font-medium resize-none shadow-sm min-h-[200px]"
                         />
                         <div className="mt-4 flex justify-between items-center px-2">
-                             <p className="text-xs text-zinc-400 font-bold">{userText.split(' ').filter(Boolean).length} Kelime</p>
-                             <button 
+                            <p className="text-xs text-zinc-400 font-bold">{userText.split(' ').filter(Boolean).length} Kelime</p>
+                            <button
                                 onClick={handleEvaluateWriting}
                                 disabled={isEvaluating || userText.length < 20}
                                 className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-xl flex items-center gap-2 active:scale-95 transition-all disabled:opacity-50"
-                             >
-                                 {isEvaluating ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
-                                 Değerlendir
-                             </button>
+                            >
+                                {isEvaluating ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+                                Değerlendir
+                            </button>
                         </div>
                     </div>
                 ) : (
                     <div className="animate-slide-up space-y-6">
                         <div className="bg-black dark:bg-zinc-900 p-8 rounded-[3rem] text-white shadow-2xl relative overflow-hidden">
-                             <div className="relative z-10 flex items-center justify-between">
-                                 <div>
-                                     <p className="text-[10px] font-black opacity-60 uppercase tracking-widest mb-1">Başarı Puanı</p>
-                                     <h3 className="text-5xl font-black">%{writingFeedback.score}</h3>
-                                     <span className="inline-block mt-2 px-3 py-1 bg-white/10 rounded-full text-xs font-bold">{writingFeedback.cefrLevel} Level</span>
-                                 </div>
-                                 <Trophy size={64} className="opacity-20 text-yellow-400" />
-                             </div>
+                            <div className="relative z-10 flex items-center justify-between">
+                                <div>
+                                    <p className="text-[10px] font-black opacity-60 uppercase tracking-widest mb-1">Başarı Puanı</p>
+                                    <h3 className="text-5xl font-black">%{writingFeedback.score}</h3>
+                                    <span className="inline-block mt-2 px-3 py-1 bg-white/10 rounded-full text-xs font-bold">{writingFeedback.cefrLevel} Level</span>
+                                </div>
+                                <Trophy size={64} className="opacity-20 text-yellow-400" />
+                            </div>
                         </div>
 
                         <div className="bg-white dark:bg-zinc-900 p-6 rounded-[2rem] border border-zinc-100 dark:border-zinc-800">
-                             <h4 className="font-bold mb-3 flex items-center gap-2"><Sparkles size={18} className="text-indigo-500" /> AI Değerlendirmesi</h4>
-                             <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{writingFeedback.feedback}</p>
+                            <h4 className="font-bold mb-3 flex items-center gap-2"><Sparkles size={18} className="text-indigo-500" /> AI Değerlendirmesi</h4>
+                            <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">{writingFeedback.feedback}</p>
                         </div>
 
                         <div className="space-y-4">
@@ -174,7 +173,7 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
                             ))}
                         </div>
 
-                        <button 
+                        <button
                             onClick={() => { setWritingFeedback(null); setUserText(''); handleStartWriting(); }}
                             className="w-full py-4 bg-zinc-100 dark:bg-zinc-800 text-black dark:text-white rounded-2xl font-black mt-4"
                         >
@@ -190,7 +189,7 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
         return (
             <div className="h-full w-full bg-zinc-50 dark:bg-zinc-950 flex flex-col p-6 animate-fade-in overflow-y-auto scrollbar-hide pb-32">
                 <header className="pt-8 mb-6 flex items-center justify-between">
-                    <button onClick={() => { setActiveMode('menu'); setPhrasalList([]); }} className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full"><ArrowRight className="rotate-180"/></button>
+                    <button onClick={() => { setActiveMode('menu'); setPhrasalList([]); }} className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full"><ArrowRight className="rotate-180" /></button>
                     <h2 className="text-xl font-black">Phrasal Verbs</h2>
                     <div className="w-10"></div>
                 </header>
@@ -199,12 +198,12 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
                     <div className="space-y-6">
                         <div className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm">
                             <h3 className="text-lg font-bold mb-6">Kelime Seç ve Öğren</h3>
-                            
+
                             <div className="mb-6">
                                 <p className="text-xs font-black text-zinc-400 uppercase tracking-widest mb-3">Ana Fiil</p>
                                 <div className="flex flex-wrap gap-2">
                                     {COMMON_BASE_VERBS.map(v => (
-                                        <button 
+                                        <button
                                             key={v}
                                             onClick={() => setBaseVerb(v)}
                                             className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${baseVerb === v ? 'bg-black text-white border-black dark:bg-white dark:text-black dark:border-white' : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-100 dark:border-zinc-700 text-zinc-500'}`}
@@ -222,7 +221,7 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
                                         const Icon = t.icon;
                                         const isSelected = phrasalTopic === t.id && !customPhrasalTopic;
                                         return (
-                                            <button 
+                                            <button
                                                 key={t.id}
                                                 onClick={() => { setPhrasalTopic(t.id); setCustomPhrasalTopic(''); }}
                                                 className={`p-3 rounded-xl border flex items-center gap-3 transition-all ${isSelected ? 'bg-white dark:bg-zinc-800 border-black dark:border-white ring-2 ring-black dark:ring-white ring-offset-2 dark:ring-offset-zinc-900' : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-100 dark:border-zinc-800'}`}
@@ -234,7 +233,7 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
                                     })}
                                 </div>
                                 <div className="relative">
-                                    <input 
+                                    <input
                                         value={customPhrasalTopic}
                                         onChange={(e) => { setCustomPhrasalTopic(e.target.value); setPhrasalTopic(''); }}
                                         placeholder="Veya kendi konunu yaz..."
@@ -246,13 +245,13 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
                             <div className="mb-8">
                                 <p className="text-xs font-black text-zinc-400 uppercase tracking-widest mb-3">Dil Tarzı</p>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <button 
+                                    <button
                                         onClick={() => setPhrasalTone('informal')}
                                         className={`py-3 rounded-xl text-sm font-bold border flex items-center justify-center gap-2 transition-all ${phrasalTone === 'informal' ? 'bg-orange-500 text-white border-orange-500' : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-100 dark:border-zinc-700 text-zinc-500'}`}
                                     >
                                         <MessageSquare size={16} /> Günlük (Informal)
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => setPhrasalTone('formal')}
                                         className={`py-3 rounded-xl text-sm font-bold border flex items-center justify-center gap-2 transition-all ${phrasalTone === 'formal' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-100 dark:border-zinc-700 text-zinc-500'}`}
                                     >
@@ -261,7 +260,7 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
                                 </div>
                             </div>
 
-                            <button 
+                            <button
                                 onClick={handleGeneratePhrasals}
                                 disabled={isGenerating}
                                 className="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"
@@ -274,12 +273,12 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
                 ) : (
                     <div className="animate-slide-up space-y-4">
                         <div className={`p-8 rounded-[2.5rem] ${phrasalTone === 'formal' ? 'bg-indigo-600' : 'bg-orange-500'} text-white shadow-xl mb-6`}>
-                             <h3 className="text-3xl font-black mb-1 capitalize">{baseVerb}</h3>
-                             <p className="text-white/70 font-bold uppercase text-[10px] tracking-widest">
+                            <h3 className="text-3xl font-black mb-1 capitalize">{baseVerb}</h3>
+                            <p className="text-white/70 font-bold uppercase text-[10px] tracking-widest">
                                 {phrasalTone} • {customPhrasalTopic || PHRASAL_TOPICS.find(t => t.id === phrasalTopic)?.label || 'Genel'}
-                             </p>
+                            </p>
                         </div>
-                        
+
                         <div className="space-y-3">
                             {phrasalList.map((item) => (
                                 <div key={item.id} className="bg-white dark:bg-zinc-900 p-5 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-sm">
@@ -297,7 +296,7 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
                                         <p className="font-bold text-[9px] uppercase tracking-widest text-zinc-400 mb-1">Örnek</p>
                                         {item.exampleSentence}
                                     </div>
-                                    <button 
+                                    <button
                                         onClick={() => {
                                             onAddWords([item]);
                                             setPhrasalList(prev => prev.filter(p => p.id !== item.id));
@@ -310,7 +309,7 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
                             ))}
                         </div>
 
-                        <button 
+                        <button
                             onClick={() => { setPhrasalList([]); handleGeneratePhrasals(); }}
                             className="w-full py-4 bg-zinc-100 dark:bg-zinc-800 text-zinc-400 font-black rounded-2xl mt-4"
                         >
@@ -331,31 +330,31 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
 
             {activeMode === 'menu' && (
                 <div className="grid grid-cols-1 gap-4">
-                    <button 
+                    <button
                         onClick={() => setActiveMode('story')}
                         className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm text-left active:scale-95 transition-all group"
                     >
-                         <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-2xl flex items-center justify-center text-purple-600 mb-6 group-hover:scale-110 transition-transform"><BookOpen /></div>
-                         <h3 className="text-xl font-bold mb-1">Hikaye Fabrikası</h3>
-                         <p className="text-xs text-zinc-500 font-medium">İlgi alanına göre AI hikayeleri yazdır.</p>
+                        <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-2xl flex items-center justify-center text-purple-600 mb-6 group-hover:scale-110 transition-transform"><BookOpen /></div>
+                        <h3 className="text-xl font-bold mb-1">Hikaye Fabrikası</h3>
+                        <p className="text-xs text-zinc-500 font-medium">İlgi alanına göre AI hikayeleri yazdır.</p>
                     </button>
 
-                    <button 
+                    <button
                         onClick={handleStartWriting}
                         className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm text-left active:scale-95 transition-all group"
                     >
-                         <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-2xl flex items-center justify-center text-orange-600 mb-6 group-hover:scale-110 transition-transform"><Edit3 /></div>
-                         <h3 className="text-xl font-bold mb-1">Yazma Atölyesi</h3>
-                         <p className="text-xs text-zinc-500 font-medium">AI değerlendirmeli İngilizce kompozisyon yaz.</p>
+                        <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-2xl flex items-center justify-center text-orange-600 mb-6 group-hover:scale-110 transition-transform"><Edit3 /></div>
+                        <h3 className="text-xl font-bold mb-1">Yazma Atölyesi</h3>
+                        <p className="text-xs text-zinc-500 font-medium">AI değerlendirmeli İngilizce kompozisyon yaz.</p>
                     </button>
 
-                    <button 
+                    <button
                         onClick={() => setActiveMode('phrasal')}
                         className="bg-white dark:bg-zinc-900 p-8 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm text-left active:scale-95 transition-all group"
                     >
-                         <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform"><Layers /></div>
-                         <h3 className="text-xl font-bold mb-1">Phrasal Verbs</h3>
-                         <p className="text-xs text-zinc-500 font-medium">Formal ve Informal öbek fiiller öğren.</p>
+                        <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform"><Layers /></div>
+                        <h3 className="text-xl font-bold mb-1">Phrasal Verbs</h3>
+                        <p className="text-xs text-zinc-500 font-medium">Formal ve Informal öbek fiiller öğren.</p>
                     </button>
 
                     <div className="p-8 rounded-[2.5rem] bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-center opacity-40">
@@ -367,18 +366,18 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
 
             {activeMode === 'story' && !activeStory && (
                 <div className="animate-slide-up">
-                    <button onClick={() => setActiveMode('menu')} className="flex items-center gap-2 text-zinc-400 font-bold text-sm mb-6"><ArrowRight className="rotate-180" size={16}/> Geri</button>
+                    <button onClick={() => setActiveMode('menu')} className="flex items-center gap-2 text-zinc-400 font-bold text-sm mb-6"><ArrowRight className="rotate-180" size={16} /> Geri</button>
                     <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 p-8 shadow-sm">
                         <h3 className="text-xl font-bold text-black dark:text-white mb-4">Ne hakkında yazalım?</h3>
                         <div className="relative mb-6">
-                            <input 
+                            <input
                                 value={topic}
                                 onChange={(e) => setTopic(e.target.value)}
                                 placeholder="Örn: Cyberpunk bir gelecek..."
                                 className="w-full bg-zinc-50 dark:bg-zinc-800 p-4 pr-12 rounded-2xl border-2 border-transparent focus:border-purple-500 outline-none text-black dark:text-white font-bold"
                             />
                         </div>
-                        <button 
+                        <button
                             onClick={handleGenerateStory}
                             disabled={isGenerating || !topic}
                             className="w-full py-4 bg-black dark:bg-white text-white dark:text-black rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"
@@ -392,7 +391,7 @@ export const Studio: React.FC<StudioProps> = ({ userLevel, onAddWords, onAddXP }
 
             {activeStory && activeMode === 'story' && (
                 <div className="animate-slide-up space-y-6">
-                    <button onClick={() => setActiveStory(null)} className="flex items-center gap-2 text-zinc-400 font-bold text-sm mb-4"><ArrowRight className="rotate-180" size={16}/> Geri</button>
+                    <button onClick={() => setActiveStory(null)} className="flex items-center gap-2 text-zinc-400 font-bold text-sm mb-4"><ArrowRight className="rotate-180" size={16} /> Geri</button>
                     <div className={`p-8 rounded-[3rem] ${activeStory.coverGradient} text-white shadow-2xl relative overflow-hidden mb-8`}>
                         <h3 className="text-3xl font-black mb-2 leading-tight">{activeStory.title}</h3>
                         <p className="text-white/60 font-black text-[10px] uppercase tracking-widest">{activeStory.genre} • {activeStory.level}</p>

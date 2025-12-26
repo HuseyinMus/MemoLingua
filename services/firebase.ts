@@ -1,95 +1,126 @@
-
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { FirebaseApp, initializeApp } from "firebase/app";
+import { Analytics, getAnalytics } from "firebase/analytics";
+import { Auth, getAuth } from "firebase/auth";
+import { Firestore, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
 // Access environment variables directly to support static analysis by bundlers (Vite/Webpack)
-const apiKeyEnv = 
+const apiKeyEnv =
   // @ts-ignore
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_API_KEY) || 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_API_KEY) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_API_KEY) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_API_KEY);
 
-const authDomainEnv = 
+const authDomainEnv =
   // @ts-ignore
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN) || 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_AUTH_DOMAIN) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_AUTH_DOMAIN);
 
-const projectIdEnv = 
+const projectIdEnv =
   // @ts-ignore
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_PROJECT_ID) || 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_PROJECT_ID) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_PROJECT_ID) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_PROJECT_ID);
 
-const storageBucketEnv = 
+const storageBucketEnv =
   // @ts-ignore
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET) || 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_STORAGE_BUCKET) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_STORAGE_BUCKET);
 
-const messagingSenderIdEnv = 
+const messagingSenderIdEnv =
   // @ts-ignore
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID) || 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_MESSAGING_SENDER_ID) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_MESSAGING_SENDER_ID);
 
-const appIdEnv = 
+const appIdEnv =
   // @ts-ignore
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_APP_ID) || 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_APP_ID) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_APP_ID) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_APP_ID);
 
-const measurementIdEnv = 
+const measurementIdEnv =
   // @ts-ignore
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID) || 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.VITE_FIREBASE_MEASUREMENT_ID) ||
   // @ts-ignore
   (typeof process !== 'undefined' && process.env?.FIREBASE_MEASUREMENT_ID);
 
 // Robust fallback configuration
-// If env vars are undefined OR empty strings, use the hardcoded values.
 const firebaseConfig = {
-  apiKey: apiKeyEnv ? apiKeyEnv : "AIzaSyCbHFt-2mkzs24ASj_pDpw8Euo6JJeKCBk",
-  authDomain: authDomainEnv ? authDomainEnv : "fitback-184bd.firebaseapp.com",
-  projectId: projectIdEnv ? projectIdEnv : "fitback-184bd",
-  storageBucket: storageBucketEnv ? storageBucketEnv : "fitback-184bd.firebasestorage.app",
-  messagingSenderId: messagingSenderIdEnv ? messagingSenderIdEnv : "1067077343589",
-  appId: appIdEnv ? appIdEnv : "1:1067077343589:web:9c6b7286c308299eaee98c",
-  measurementId: measurementIdEnv ? measurementIdEnv : "G-W4YJ6VKQM3"
+  apiKey: apiKeyEnv,
+  authDomain: authDomainEnv,
+  projectId: projectIdEnv,
+  storageBucket: storageBucketEnv,
+  messagingSenderId: messagingSenderIdEnv,
+  appId: appIdEnv,
+  measurementId: measurementIdEnv
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Basic validation and Safe Init
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
+let analytics: Analytics | null = null;
 
-let analytics = null;
-// Only initialize analytics in browser environment and try/catch to prevent API key errors from crashing the app
-if (typeof window !== 'undefined') {
+if (!firebaseConfig.apiKey) {
+  console.error("CRITICAL: Firebase configuration is missing. App may not work correctly.");
+  const dummyConfig = { apiKey: "dummy-key-to-prevent-crash", projectId: "dummy" };
+  app = initializeApp(dummyConfig);
+} else {
   try {
-    // Check if measurementId is actually present before initializing
-    if (firebaseConfig.measurementId && firebaseConfig.measurementId !== "G-DEMO") {
-        analytics = getAnalytics(app);
-    }
+    app = initializeApp(firebaseConfig);
   } catch (e) {
-    console.warn("Firebase Analytics failed to initialize (this is often safe to ignore during development):", e);
+    console.error("Firebase init failed:", e);
+    app = initializeApp({ apiKey: "dummy-key-to-prevent-crash" });
   }
 }
 
-const auth = getAuth(app);
-const db = getFirestore(app);
+// Check environment for analytics
+if (typeof window !== 'undefined') {
+  try {
+    if (firebaseConfig.measurementId && firebaseConfig.measurementId !== "G-DEMO") {
+      analytics = getAnalytics(app);
+    }
+  } catch (e) {
+    console.warn("Analytics init warning:", e);
+  }
+}
+
+// Initialize services with error boundary
+try {
+  auth = getAuth(app);
+} catch (e) {
+  console.error("Auth init failed:", e);
+}
+
+try {
+  // Try to initialize with persistence first
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+} catch (e) {
+  console.warn("Firestore persistence init failed, falling back to default:", e);
+  try {
+    // Fallback to standard Firestore if persistence fails
+    db = getFirestore(app);
+  } catch (fe) {
+    console.error("Critical: Firestore initialization failed completely:", fe);
+  }
+}
 
 export { app, analytics, auth, db };

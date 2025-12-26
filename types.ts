@@ -55,7 +55,13 @@ export enum AppView {
   COLLECTION = 'COLLECTION'
 }
 
-export type StudyMode = 'meaning' | 'context' | 'writing' | 'speaking' | 'translation';
+export enum StudyMode {
+  MEANING = 'meaning',
+  CONTEXT = 'context',
+  WRITING = 'writing',
+  SPEAKING = 'speaking',
+  TRANSLATION = 'translation'
+}
 
 export type UserLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 export type UserGoal = 'General English' | 'IELTS' | 'TOEFL' | 'SAT' | 'Business' | 'Travel';
@@ -115,25 +121,25 @@ export interface GeneratedStory {
 }
 
 export interface ChatMessage {
-    id: string;
-    role: 'user' | 'ai';
-    text: string;
-    correction?: string;
-    timestamp: number;
+  id: string;
+  role: 'user' | 'ai';
+  text: string;
+  correction?: string;
+  timestamp: number;
 }
 
 export interface VoiceSession {
-    id: string;
-    timestamp: number;
-    scenario: string;
-    duration: number; // saniye
-    transcript: ChatMessage[];
-    analysis?: {
-        fluencyScore: number;
-        grammarFeedback: string;
-        vocabularyUsed: string[];
-        suggestions: string[];
-    };
+  id: string;
+  timestamp: number;
+  scenario: string;
+  duration: number; // saniye
+  transcript: ChatMessage[];
+  analysis?: {
+    fluencyScore: number;
+    grammarFeedback: string;
+    vocabularyUsed: string[];
+    suggestions: string[];
+  };
 }
 
 export interface LeaderboardEntry {

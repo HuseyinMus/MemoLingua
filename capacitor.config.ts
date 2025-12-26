@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.memolingua.app',
+  appId: 'com.eser.wordmaster',
   appName: 'MemoLingua',
   webDir: 'dist',
   server: {

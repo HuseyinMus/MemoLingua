@@ -4,6 +4,7 @@ import { Search, Plus, Loader2, Sparkles, X, Check, Brain, Zap, ArrowRight, Came
 import { UserLevel, WordData, UserProfile, UserWord } from '../types';
 import { generateSingleWord, extractVocabularyFromImage, generateDailyBatch, playGeminiAudio, generateAudio } from '../services/geminiService';
 import { Shimmer } from './Shimmer';
+import { audioManager } from '../services/audioManager';
 
 interface DiscoverProps {
     userProfile: UserProfile | null;
@@ -23,12 +24,12 @@ const DISCOVERY_THEMES = [
     { id: 'daily', label: 'Günlük Yaşam', icon: Coffee, color: 'text-orange-500', prompt: 'Everyday casual conversation' },
 ];
 
-export const Discover: React.FC<DiscoverProps> = ({ 
-    userProfile, 
-    words, 
-    needsDailyBatch, 
-    isGeneratingDaily, 
-    onGenerateDaily, 
+export const Discover: React.FC<DiscoverProps> = ({
+    userProfile,
+    words,
+    needsDailyBatch,
+    isGeneratingDaily,
+    onGenerateDaily,
     onAddWord,
     onAddXP
 }) => {
@@ -45,8 +46,8 @@ export const Discover: React.FC<DiscoverProps> = ({
 
     const filteredLocalWords = useMemo(() => {
         if (!searchTerm.trim()) return [];
-        return words.filter(w => 
-            w.term.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        return words.filter(w =>
+            w.term.toLowerCase().includes(searchTerm.toLowerCase()) ||
             w.translation.toLowerCase().includes(searchTerm.toLowerCase())
         ).slice(0, 3);
     }, [words, searchTerm]);
@@ -106,9 +107,8 @@ export const Discover: React.FC<DiscoverProps> = ({
         if (isSpeaking) return;
         setIsSpeaking(true);
         try {
-            const base64 = await generateAudio(text);
-            if (base64) await playGeminiAudio(base64);
-        } catch (e) {} finally { setIsSpeaking(false); }
+            await audioManager.speak(text);
+        } finally { setIsSpeaking(false); }
     };
 
     const handleAddDiscoveredWord = (word: WordData) => {
@@ -119,7 +119,7 @@ export const Discover: React.FC<DiscoverProps> = ({
 
     return (
         <div className="h-full w-full bg-zinc-50 dark:bg-zinc-950 flex flex-col p-6 animate-fade-in overflow-y-auto scrollbar-hide pb-32 relative">
-            
+
             {/* AI Generation Loading Overlay */}
             {isGlobalLoading && (
                 <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xl flex flex-col items-center justify-center p-10 animate-fade-in">
@@ -149,7 +149,7 @@ export const Discover: React.FC<DiscoverProps> = ({
                     <p className="text-zinc-500 font-medium text-sm italic">Dünyayı İngilizce ile tanı.</p>
                 </div>
                 <div className="flex gap-2">
-                    <button 
+                    <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isGlobalLoading}
                         className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm text-indigo-500 active:scale-90 transition-all disabled:opacity-50"
@@ -163,7 +163,7 @@ export const Discover: React.FC<DiscoverProps> = ({
             {/* Magic Search Bar Section */}
             <div className="space-y-3 mb-8">
                 <div className="relative group">
-                    <input 
+                    <input
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && filteredLocalWords.length === 0 && handleQuickCreate()}
@@ -175,7 +175,7 @@ export const Discover: React.FC<DiscoverProps> = ({
                         {isQuickCreating ? <Loader2 size={20} className="animate-spin text-indigo-500" /> : <Search size={20} />}
                     </div>
                     {searchTerm && (
-                        <button 
+                        <button
                             onClick={() => setSearchTerm('')}
                             className="absolute right-5 top-1/2 -translate-y-1/2 p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
                         >
@@ -196,9 +196,9 @@ export const Discover: React.FC<DiscoverProps> = ({
                                 <div className="px-2 py-0.5 bg-zinc-50 dark:bg-zinc-800 rounded-md text-[9px] font-black text-zinc-400 border border-zinc-100 dark:border-zinc-700">Koleksiyonda</div>
                             </div>
                         ))}
-                        
+
                         {filteredLocalWords.length === 0 && !isQuickCreating && (
-                            <button 
+                            <button
                                 onClick={handleQuickCreate}
                                 className="w-full bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800/30 flex items-center justify-between group active:scale-[0.98] transition-all"
                             >
@@ -228,12 +228,12 @@ export const Discover: React.FC<DiscoverProps> = ({
                         </div>
                     </div>
                     <p className="text-xs text-zinc-500 mb-6 font-medium relative z-10">Kişiselleştirilmiş algoritma ile senin için seçilen 10 kelimeyi hemen keşfet.</p>
-                    <button 
+                    <button
                         onClick={onGenerateDaily}
                         disabled={isGlobalLoading}
                         className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 disabled:opacity-50"
                     >
-                        {isGeneratingDaily ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16} />}
+                        {isGeneratingDaily ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
                         {isGeneratingDaily ? 'Hazırlanıyor...' : 'Seti Aç'}
                     </button>
                 </div>
@@ -249,7 +249,7 @@ export const Discover: React.FC<DiscoverProps> = ({
                     {DISCOVERY_THEMES.map(theme => {
                         const Icon = theme.icon;
                         return (
-                            <button 
+                            <button
                                 key={theme.id}
                                 onClick={() => handleThemeDiscovery(theme.prompt)}
                                 disabled={isGlobalLoading}
@@ -273,8 +273,8 @@ export const Discover: React.FC<DiscoverProps> = ({
                         </div>
                         <div className="grid grid-cols-1 gap-4">
                             {discoveredWords.map(word => (
-                                <button 
-                                    key={word.id} 
+                                <button
+                                    key={word.id}
                                     onClick={() => setPreviewWord(word)}
                                     className="w-full bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm flex items-center justify-between group animate-fade-in relative overflow-hidden text-left"
                                 >
@@ -310,14 +310,14 @@ export const Discover: React.FC<DiscoverProps> = ({
                 <div className="fixed inset-0 z-[120] flex items-end justify-center animate-fade-in bg-black/70 backdrop-blur-md px-4">
                     <div className="bg-white dark:bg-zinc-950 w-full max-w-md rounded-t-[3.5rem] animate-slide-up shadow-2xl flex flex-col p-8 pb-12 max-h-[85dvh] border-t border-white/10 relative">
                         <div className="w-12 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full mx-auto mb-6"></div>
-                        
+
                         <div className="flex justify-between items-center mb-8">
                             <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-full">
                                 <Sparkles size={16} className="text-indigo-500" />
                                 <span className="text-[11px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Yapay Zeka Keşfi</span>
                             </div>
                             <button onClick={() => setPreviewWord(null)} className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full text-zinc-500 hover:text-black dark:hover:text-white transition-colors">
-                                <X size={20}/>
+                                <X size={20} />
                             </button>
                         </div>
 
@@ -329,7 +329,7 @@ export const Discover: React.FC<DiscoverProps> = ({
                                     <div className="text-3xl font-black text-indigo-600 drop-shadow-sm">{previewWord.translation}</div>
                                 </div>
                                 <div className="flex flex-col items-center gap-3">
-                                    <button 
+                                    <button
                                         onClick={() => handleSpeak(previewWord.term)}
                                         disabled={isSpeaking}
                                         className="w-16 h-16 rounded-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 flex items-center justify-center text-indigo-600 mx-auto shadow-md active:scale-90 transition-all disabled:opacity-50"
@@ -364,13 +364,13 @@ export const Discover: React.FC<DiscoverProps> = ({
                         </div>
 
                         <div className="pt-8 flex gap-3">
-                            <button 
+                            <button
                                 onClick={() => setPreviewWord(null)}
                                 className="flex-1 py-5 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-black rounded-3xl text-xs uppercase tracking-widest"
                             >
                                 Geç
                             </button>
-                            <button 
+                            <button
                                 onClick={() => handleAddDiscoveredWord(previewWord)}
                                 className="flex-[2.5] py-5 bg-indigo-600 text-white font-black rounded-3xl text-xs uppercase tracking-widest shadow-xl shadow-indigo-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
                             >
