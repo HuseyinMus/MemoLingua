@@ -12,8 +12,12 @@ interface ProfileProps {
 }
 
 export const Profile: React.FC<ProfileProps> = ({ userProfile, words, onUpdateProfile, onSignOut, onOpenSettings }) => {
+    // Stats Calculations
+    const totalWords = words.length;
     const masteredCount = words.filter(w => w.srs.interval >= 21).length;
     const learningCount = words.filter(w => w.srs.interval > 0 && w.srs.interval < 21).length;
+    const newCount = words.filter(w => w.srs.interval === 0).length;
+    
     const progressPercent = Math.min(100, ((userProfile?.xp || 0) % 1000) / 1000 * 100);
     const levelNumber = Math.floor((userProfile?.xp || 0) / 1000) + 1;
 
@@ -115,7 +119,7 @@ export const Profile: React.FC<ProfileProps> = ({ userProfile, words, onUpdatePr
                 </div>
             </div>
 
-            {/* Quests Section - NEW */}
+            {/* Quests Section */}
             <div className="mb-8">
                 <div className="flex justify-between items-center px-2 mb-4">
                     <h4 className="font-black text-[10px] uppercase tracking-widest text-zinc-400">Günlük Görevler</h4>
@@ -153,7 +157,7 @@ export const Profile: React.FC<ProfileProps> = ({ userProfile, words, onUpdatePr
                 </div>
             </div>
 
-            {/* League Section - ENHANCED */}
+            {/* League Section */}
             <div className={`p-8 rounded-[3.5rem] bg-gradient-to-br ${getLeagueColor(userProfile?.league || 'Bronze')} text-white shadow-2xl relative overflow-hidden mb-8 group active:scale-[0.98] transition-all`}>
                 <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
                     <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -187,42 +191,56 @@ export const Profile: React.FC<ProfileProps> = ({ userProfile, words, onUpdatePr
                 </div>
             </div>
 
-            {/* Breakdown Analysis */}
+            {/* Vocabulary Statistics - ENHANCED */}
             <div className="bg-white dark:bg-zinc-900 p-8 rounded-[3rem] border border-zinc-100 dark:border-zinc-800 shadow-sm mb-10">
-                <div className="flex justify-between items-center mb-8">
-                    <h4 className="font-black text-sm text-black dark:text-white uppercase tracking-tighter">Hafıza Analizi</h4>
-                    <BarChart3 size={18} className="text-zinc-300" />
-                </div>
-                <div className="grid grid-cols-1 gap-6">
-                    <div className="space-y-3">
-                        <div className="flex justify-between items-end">
-                            <div>
-                                <p className="text-[10px] font-black text-green-500 uppercase tracking-widest mb-1">Usta Düzey</p>
-                                <p className="text-xs font-bold text-zinc-500">Tamamen öğrenilen kelimeler</p>
-                            </div>
-                            <span className="text-xl font-black text-black dark:text-white">{masteredCount}</span>
-                        </div>
-                        <div className="h-2.5 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                            <div 
-                                className="h-full bg-green-500 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.3)] transition-all duration-1000" 
-                                style={{ width: `${(masteredCount / Math.max(1, words.length)) * 100}%` }}
-                            ></div>
-                        </div>
+                <div className="flex justify-between items-start mb-6">
+                    <div>
+                        <h4 className="font-black text-sm text-black dark:text-white uppercase tracking-tighter">Kelime Dağarcığı</h4>
+                        <p className="text-xs text-zinc-500 font-medium">Toplam İlerleme Durumu</p>
                     </div>
-                    <div className="space-y-3">
-                        <div className="flex justify-between items-end">
-                            <div>
-                                <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Aktif Öğrenim</p>
-                                <p className="text-xs font-bold text-zinc-500">Hafızada güçlenen kelimeler</p>
-                            </div>
-                            <span className="text-xl font-black text-black dark:text-white">{learningCount}</span>
+                    <div className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-xl">
+                        <BarChart3 size={20} className="text-zinc-400" />
+                    </div>
+                </div>
+
+                {/* Total Big Number */}
+                <div className="mb-6">
+                     <span className="text-5xl font-black text-black dark:text-white tracking-tighter">{totalWords}</span>
+                     <span className="text-sm font-bold text-zinc-400 ml-2 uppercase tracking-widest">Kelime</span>
+                </div>
+
+                {/* Segmented Progress Bar */}
+                <div className="h-4 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden flex mb-6">
+                    {/* Mastered */}
+                    <div style={{ width: `${(masteredCount / Math.max(1, totalWords)) * 100}%` }} className="h-full bg-green-500 transition-all duration-1000" />
+                    {/* Learning */}
+                    <div style={{ width: `${(learningCount / Math.max(1, totalWords)) * 100}%` }} className="h-full bg-blue-500 transition-all duration-1000" />
+                    {/* New (Implicitly remaining or specific color) */}
+                    <div style={{ width: `${(newCount / Math.max(1, totalWords)) * 100}%` }} className="h-full bg-zinc-300 dark:bg-zinc-700 transition-all duration-1000" />
+                </div>
+
+                {/* Legend / Details */}
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></div>
+                            <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Ustalaşılmış</span>
                         </div>
-                        <div className="h-2.5 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                            <div 
-                                className="h-full bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.3)] transition-all duration-1000" 
-                                style={{ width: `${(learningCount / Math.max(1, words.length)) * 100}%` }}
-                            ></div>
+                        <span className="text-xs font-black text-black dark:text-white">{masteredCount} ({Math.round((masteredCount/Math.max(1,totalWords))*100)}%)</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+                            <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Öğreniliyor</span>
                         </div>
+                        <span className="text-xs font-black text-black dark:text-white">{learningCount} ({Math.round((learningCount/Math.max(1,totalWords))*100)}%)</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-3 h-3 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
+                            <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Yeni / Başlanmamış</span>
+                        </div>
+                        <span className="text-xs font-black text-black dark:text-white">{newCount} ({Math.round((newCount/Math.max(1,totalWords))*100)}%)</span>
                     </div>
                 </div>
             </div>

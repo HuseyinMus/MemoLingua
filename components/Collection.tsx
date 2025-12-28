@@ -3,14 +3,16 @@ import React, { useState } from 'react';
 import { ArrowLeft, Search, Trophy, Sparkles, Filter, LayoutGrid, List, X, Volume2, Image as ImageIcon, BookOpen, ExternalLink, Loader2, Brain } from 'lucide-react';
 import { UserWord, UserLevel } from '../types';
 import { getWordDeepDive } from '../services/geminiService';
+import { Shimmer } from './Shimmer';
 
 interface CollectionProps {
     words: UserWord[];
     userLevel: UserLevel;
     onBack: () => void;
+    loading?: boolean;
 }
 
-export const Collection: React.FC<CollectionProps> = ({ words, userLevel, onBack }) => {
+export const Collection: React.FC<CollectionProps> = ({ words, userLevel, onBack, loading = false }) => {
     const [search, setSearch] = useState('');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('list'); // Varsayılanı liste yaptık
     const [selectedWord, setSelectedWord] = useState<UserWord | null>(null);
@@ -61,6 +63,7 @@ export const Collection: React.FC<CollectionProps> = ({ words, userLevel, onBack
                         onChange={e => setSearch(e.target.value)}
                         placeholder="Kelime ara..."
                         className="bg-transparent border-none outline-none py-3 text-sm font-bold w-full text-black dark:text-white"
+                        disabled={loading}
                     />
                 </div>
                 <button 
@@ -72,70 +75,87 @@ export const Collection: React.FC<CollectionProps> = ({ words, userLevel, onBack
             </div>
 
             <div className="flex-1 overflow-y-auto scrollbar-hide pb-28">
-                {viewMode === 'grid' ? (
-                    <div className="grid grid-cols-2 gap-3">
-                        {filteredWords.map(word => {
-                            const isMastered = word.srs.interval >= 21;
-                            return (
-                                <button 
-                                    key={word.id} 
-                                    onClick={() => handleWordClick(word)}
-                                    className={`p-5 rounded-[2rem] border text-left relative overflow-hidden transition-all active:scale-95 ${isMastered ? 'bg-indigo-600 text-white border-transparent shadow-xl' : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 text-black dark:text-white shadow-sm'}`}
-                                >
-                                    {isMastered && <Sparkles size={40} className="absolute -right-4 -bottom-4 opacity-20" />}
-                                    <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full mb-3 inline-block ${isMastered ? 'bg-white/20' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400'}`}>
-                                        {word.type}
-                                    </span>
-                                    <h3 className="text-xl font-black truncate mb-0.5">{word.term}</h3>
-                                    <p className={`text-xs font-medium truncate ${isMastered ? 'text-white/80' : 'text-zinc-500'}`}>{word.translation}</p>
-                                </button>
-                            );
-                        })}
+                {loading ? (
+                    // LOADING STATE SKELETON
+                    <div className={`gap-3 ${viewMode === 'grid' ? 'grid grid-cols-2' : 'space-y-2'}`}>
+                        {[...Array(6)].map((_, i) => (
+                            <div key={i} className={`bg-white dark:bg-zinc-900 p-5 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 ${viewMode === 'list' ? 'flex items-center gap-4' : 'h-32'}`}>
+                                <div className="flex-1 space-y-3">
+                                    <Shimmer className="h-4 w-3/4" />
+                                    <Shimmer className="h-3 w-1/2" />
+                                </div>
+                                {viewMode === 'list' && <Shimmer className="h-8 w-8 rounded-full" />}
+                            </div>
+                        ))}
                     </div>
                 ) : (
-                    <div className="space-y-2">
-                        {filteredWords.map(word => {
-                            const status = getSRSStatus(word);
-                            return (
-                                <button 
-                                    key={word.id} 
-                                    onClick={() => handleWordClick(word)} 
-                                    className="w-full bg-white dark:bg-zinc-900 p-5 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-sm flex items-center justify-between active:scale-[0.98] transition-all group"
-                                >
-                                    <div className="text-left flex-1 min-w-0 pr-4">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <h3 className="font-black text-lg text-black dark:text-white truncate">{word.term}</h3>
-                                            <span className="text-[10px] text-zinc-400 font-bold uppercase">{word.type}</span>
-                                        </div>
-                                        <p className="text-sm text-zinc-500 font-medium truncate">{word.translation}</p>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                        <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${status.color}`}>
-                                            {status.label}
-                                        </div>
-                                        <div className="flex gap-0.5">
-                                            {[...Array(5)].map((_, i) => (
-                                                <div 
-                                                    key={i} 
-                                                    className={`w-1.5 h-1.5 rounded-full ${i < (word.srs.streak % 6) ? 'bg-indigo-500' : 'bg-zinc-200 dark:bg-zinc-800'}`}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
-                
-                {filteredWords.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-20 text-center">
-                        <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center text-zinc-300 mb-4">
-                            <Search size={32} />
-                        </div>
-                        <h3 className="text-lg font-bold text-black dark:text-white">Kelime bulunamadı</h3>
-                        <p className="text-sm text-zinc-500">Arama kriterlerini değiştirmeyi dene.</p>
-                    </div>
+                    <>
+                        {viewMode === 'grid' ? (
+                            <div className="grid grid-cols-2 gap-3">
+                                {filteredWords.map(word => {
+                                    const isMastered = word.srs.interval >= 21;
+                                    return (
+                                        <button 
+                                            key={word.id} 
+                                            onClick={() => handleWordClick(word)}
+                                            className={`p-5 rounded-[2rem] border text-left relative overflow-hidden transition-all active:scale-95 ${isMastered ? 'bg-indigo-600 text-white border-transparent shadow-xl' : 'bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 text-black dark:text-white shadow-sm'}`}
+                                        >
+                                            {isMastered && <Sparkles size={40} className="absolute -right-4 -bottom-4 opacity-20" />}
+                                            <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full mb-3 inline-block ${isMastered ? 'bg-white/20' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400'}`}>
+                                                {word.type}
+                                            </span>
+                                            <h3 className="text-xl font-black truncate mb-0.5">{word.term}</h3>
+                                            <p className={`text-xs font-medium truncate ${isMastered ? 'text-white/80' : 'text-zinc-500'}`}>{word.translation}</p>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {filteredWords.map(word => {
+                                    const status = getSRSStatus(word);
+                                    return (
+                                        <button 
+                                            key={word.id} 
+                                            onClick={() => handleWordClick(word)} 
+                                            className="w-full bg-white dark:bg-zinc-900 p-5 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-sm flex items-center justify-between active:scale-[0.98] transition-all group"
+                                        >
+                                            <div className="text-left flex-1 min-w-0 pr-4">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <h3 className="font-black text-lg text-black dark:text-white truncate">{word.term}</h3>
+                                                    <span className="text-[10px] text-zinc-400 font-bold uppercase">{word.type}</span>
+                                                </div>
+                                                <p className="text-sm text-zinc-500 font-medium truncate">{word.translation}</p>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-2">
+                                                <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${status.color}`}>
+                                                    {status.label}
+                                                </div>
+                                                <div className="flex gap-0.5">
+                                                    {[...Array(5)].map((_, i) => (
+                                                        <div 
+                                                            key={i} 
+                                                            className={`w-1.5 h-1.5 rounded-full ${i < (word.srs.streak % 6) ? 'bg-indigo-500' : 'bg-zinc-200 dark:bg-zinc-800'}`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        
+                        {filteredWords.length === 0 && (
+                            <div className="flex flex-col items-center justify-center py-20 text-center">
+                                <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-900 rounded-full flex items-center justify-center text-zinc-300 mb-4">
+                                    <Search size={32} />
+                                </div>
+                                <h3 className="text-lg font-bold text-black dark:text-white">Kelime bulunamadı</h3>
+                                <p className="text-sm text-zinc-500">Arama kriterlerini değiştirmeyi dene.</p>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
@@ -204,4 +224,3 @@ export const Collection: React.FC<CollectionProps> = ({ words, userLevel, onBack
         </div>
     );
 };
-

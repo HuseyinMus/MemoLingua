@@ -1,10 +1,9 @@
 
 import React, { useState, useMemo, useRef } from 'react';
-import { Search, Plus, Loader2, Sparkles, X, Check, Brain, Zap, ArrowRight, Camera, Image as ImageIcon, Briefcase, Plane, Book, Coffee, Globe, Hash, Volume2, Info, BookOpen, Lightbulb, ExternalLink, Languages } from 'lucide-react';
+import { Search, Plus, Loader2, Sparkles, X, Check, Brain, Zap, ArrowRight, Camera, Image as ImageIcon, Briefcase, Plane, Book, Coffee, Globe, Hash, Volume2, Info, BookOpen, Lightbulb, ExternalLink, Languages, Palette, Music } from 'lucide-react';
 import { UserLevel, WordData, UserProfile, UserWord } from '../types';
 import { generateSingleWord, extractVocabularyFromImage, generateDailyBatch, playGeminiAudio, generateAudio } from '../services/geminiService';
 import { Shimmer } from './Shimmer';
-import { audioManager } from '../services/audioManager';
 
 interface DiscoverProps {
     userProfile: UserProfile | null;
@@ -17,19 +16,20 @@ interface DiscoverProps {
 }
 
 const DISCOVERY_THEMES = [
-    { id: 'tech', label: 'Teknoloji', icon: Globe, color: 'text-blue-500', prompt: 'Modern technology and gadgets' },
-    { id: 'business', label: 'İş Dünyası', icon: Briefcase, color: 'text-indigo-500', prompt: 'Professional business communication' },
-    { id: 'travel', label: 'Seyahat', icon: Plane, color: 'text-emerald-500', prompt: 'Travel and exploration' },
-    { id: 'academic', label: 'Akademik', icon: Book, color: 'text-purple-500', prompt: 'Academic and scientific research' },
-    { id: 'daily', label: 'Günlük Yaşam', icon: Coffee, color: 'text-orange-500', prompt: 'Everyday casual conversation' },
+    { id: 'tech', label: 'Teknoloji', subLabel: 'Dijital Gelecek', icon: Globe, gradient: 'from-blue-600 to-cyan-500', shadow: 'shadow-blue-500/30', prompt: 'Modern technology, AI, coding, and gadgets' },
+    { id: 'business', label: 'İş Dünyası', subLabel: 'Profesyonel Yaşam', icon: Briefcase, gradient: 'from-indigo-600 to-purple-600', shadow: 'shadow-indigo-500/30', prompt: 'Professional business communication and economy' },
+    { id: 'travel', label: 'Seyahat', subLabel: 'Dünya Turu', icon: Plane, gradient: 'from-emerald-500 to-teal-400', shadow: 'shadow-emerald-500/30', prompt: 'Travel, airports, hotels and exploration' },
+    { id: 'academic', label: 'Akademik', subLabel: 'Bilim & Araştırma', icon: Book, gradient: 'from-violet-600 to-fuchsia-600', shadow: 'shadow-violet-500/30', prompt: 'Academic research, science and university life' },
+    { id: 'daily', label: 'Günlük', subLabel: 'Yaşam & Sohbet', icon: Coffee, gradient: 'from-orange-500 to-amber-500', shadow: 'shadow-orange-500/30', prompt: 'Everyday casual conversation and lifestyle' },
+    { id: 'art', label: 'Sanat & Kültür', subLabel: 'Yaratıcılık', icon: Palette, gradient: 'from-pink-500 to-rose-500', shadow: 'shadow-pink-500/30', prompt: 'Art, music, cinema and culture' },
 ];
 
-export const Discover: React.FC<DiscoverProps> = ({
-    userProfile,
-    words,
-    needsDailyBatch,
-    isGeneratingDaily,
-    onGenerateDaily,
+export const Discover: React.FC<DiscoverProps> = ({ 
+    userProfile, 
+    words, 
+    needsDailyBatch, 
+    isGeneratingDaily, 
+    onGenerateDaily, 
     onAddWord,
     onAddXP
 }) => {
@@ -46,8 +46,8 @@ export const Discover: React.FC<DiscoverProps> = ({
 
     const filteredLocalWords = useMemo(() => {
         if (!searchTerm.trim()) return [];
-        return words.filter(w =>
-            w.term.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        return words.filter(w => 
+            w.term.toLowerCase().includes(searchTerm.toLowerCase()) || 
             w.translation.toLowerCase().includes(searchTerm.toLowerCase())
         ).slice(0, 3);
     }, [words, searchTerm]);
@@ -107,8 +107,9 @@ export const Discover: React.FC<DiscoverProps> = ({
         if (isSpeaking) return;
         setIsSpeaking(true);
         try {
-            await audioManager.speak(text);
-        } finally { setIsSpeaking(false); }
+            const base64 = await generateAudio(text);
+            if (base64) await playGeminiAudio(base64);
+        } catch (e) {} finally { setIsSpeaking(false); }
     };
 
     const handleAddDiscoveredWord = (word: WordData) => {
@@ -119,7 +120,7 @@ export const Discover: React.FC<DiscoverProps> = ({
 
     return (
         <div className="h-full w-full bg-zinc-50 dark:bg-zinc-950 flex flex-col p-6 animate-fade-in overflow-y-auto scrollbar-hide pb-32 relative">
-
+            
             {/* AI Generation Loading Overlay */}
             {isGlobalLoading && (
                 <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xl flex flex-col items-center justify-center p-10 animate-fade-in">
@@ -143,16 +144,16 @@ export const Discover: React.FC<DiscoverProps> = ({
                 </div>
             )}
 
-            <header className="pt-8 mb-6 flex justify-between items-start">
+            <header className="pt-4 mb-4 flex justify-between items-start">
                 <div>
-                    <h2 className="text-4xl font-black text-black dark:text-white tracking-tighter mb-2">Keşfet</h2>
+                    <h2 className="text-4xl font-black text-black dark:text-white tracking-tighter mb-1">Keşfet</h2>
                     <p className="text-zinc-500 font-medium text-sm italic">Dünyayı İngilizce ile tanı.</p>
                 </div>
                 <div className="flex gap-2">
-                    <button
+                    <button 
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isGlobalLoading}
-                        className="p-4 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm text-indigo-500 active:scale-90 transition-all disabled:opacity-50"
+                        className="p-3 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-100 dark:border-zinc-800 shadow-sm text-indigo-500 active:scale-90 transition-all disabled:opacity-50"
                     >
                         <Camera size={20} />
                     </button>
@@ -161,21 +162,21 @@ export const Discover: React.FC<DiscoverProps> = ({
             </header>
 
             {/* Magic Search Bar Section */}
-            <div className="space-y-3 mb-8">
+            <div className="space-y-3 mb-4">
                 <div className="relative group">
-                    <input
+                    <input 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && filteredLocalWords.length === 0 && handleQuickCreate()}
                         disabled={isGlobalLoading}
                         placeholder="Kelime ara veya AI ile oluştur..."
-                        className="w-full bg-white dark:bg-zinc-900 p-5 pl-14 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.04)] font-bold text-sm outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all text-black dark:text-white disabled:opacity-50"
+                        className="w-full bg-white dark:bg-zinc-900 p-4 pl-12 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.04)] font-bold text-sm outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all text-black dark:text-white disabled:opacity-50"
                     />
-                    <div className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-400">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">
                         {isQuickCreating ? <Loader2 size={20} className="animate-spin text-indigo-500" /> : <Search size={20} />}
                     </div>
                     {searchTerm && (
-                        <button
+                        <button 
                             onClick={() => setSearchTerm('')}
                             className="absolute right-5 top-1/2 -translate-y-1/2 p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full text-zinc-400 hover:text-black dark:hover:text-white transition-colors"
                         >
@@ -196,9 +197,9 @@ export const Discover: React.FC<DiscoverProps> = ({
                                 <div className="px-2 py-0.5 bg-zinc-50 dark:bg-zinc-800 rounded-md text-[9px] font-black text-zinc-400 border border-zinc-100 dark:border-zinc-700">Koleksiyonda</div>
                             </div>
                         ))}
-
+                        
                         {filteredLocalWords.length === 0 && !isQuickCreating && (
-                            <button
+                            <button 
                                 onClick={handleQuickCreate}
                                 className="w-full bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-800/30 flex items-center justify-between group active:scale-[0.98] transition-all"
                             >
@@ -218,45 +219,59 @@ export const Discover: React.FC<DiscoverProps> = ({
 
             {/* Daily Batch Prompt */}
             {needsDailyBatch && (
-                <div className="bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.04)] animate-slide-up mb-8 relative overflow-hidden group">
+                <div className="bg-white dark:bg-zinc-900 p-5 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.04)] animate-slide-up mb-5 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform"><Zap size={80} /></div>
-                    <div className="flex items-center gap-3 mb-4">
+                    <div className="flex items-center gap-3 mb-3">
                         <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center text-indigo-600"><Zap size={20} /></div>
                         <div>
                             <h4 className="font-black text-sm">Günün Seti Hazır</h4>
                             <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">{userProfile?.goal} • {userProfile?.level}</p>
                         </div>
                     </div>
-                    <p className="text-xs text-zinc-500 mb-6 font-medium relative z-10">Kişiselleştirilmiş algoritma ile senin için seçilen 10 kelimeyi hemen keşfet.</p>
-                    <button
+                    <p className="text-xs text-zinc-500 mb-4 font-medium relative z-10">Kişiselleştirilmiş algoritma ile senin için seçilen 10 kelimeyi hemen keşfet.</p>
+                    <button 
                         onClick={onGenerateDaily}
                         disabled={isGlobalLoading}
-                        className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                        className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 disabled:opacity-50"
                     >
-                        {isGeneratingDaily ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                        {isGeneratingDaily ? <Loader2 size={16} className="animate-spin"/> : <Sparkles size={16} />}
                         {isGeneratingDaily ? 'Hazırlanıyor...' : 'Seti Aç'}
                     </button>
                 </div>
             )}
 
-            {/* Themed Explorer Section */}
-            <div className="mb-10">
-                <div className="flex justify-between items-center px-2 mb-4">
+            {/* Themed Explorer Section - REDESIGNED */}
+            <div className="mb-4">
+                <div className="flex justify-between items-center px-2 mb-3">
                     <h4 className="font-black text-[10px] uppercase tracking-widest text-zinc-400">Tematik Keşif</h4>
                     {isGeneratingTheme && <Loader2 size={14} className="animate-spin text-indigo-500" />}
                 </div>
-                <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2 px-1">
+                
+                <div className="grid grid-cols-2 gap-3">
                     {DISCOVERY_THEMES.map(theme => {
                         const Icon = theme.icon;
                         return (
-                            <button
+                            <button 
                                 key={theme.id}
                                 onClick={() => handleThemeDiscovery(theme.prompt)}
                                 disabled={isGlobalLoading}
-                                className="flex-shrink-0 bg-white dark:bg-zinc-900 px-5 py-4 rounded-3xl border border-zinc-100 dark:border-zinc-800 shadow-sm flex flex-col items-center gap-2 active:scale-95 transition-all hover:border-indigo-500/30 disabled:opacity-50"
+                                className={`relative group overflow-hidden rounded-[2.5rem] p-5 text-left shadow-lg transition-all active:scale-95 hover:shadow-xl disabled:opacity-50 disabled:active:scale-100 bg-gradient-to-br ${theme.gradient} ${theme.shadow}`}
                             >
-                                <Icon size={24} className={theme.color} />
-                                <span className="text-[10px] font-black uppercase whitespace-nowrap">{theme.label}</span>
+                                {/* Background Abstract Icon */}
+                                <Icon 
+                                    size={80} 
+                                    className="absolute -right-4 -bottom-4 text-white opacity-10 group-hover:opacity-20 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-500" 
+                                />
+                                
+                                <div className="relative z-10 flex flex-col h-full">
+                                    <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white mb-3 shadow-inner border border-white/20">
+                                        <Icon size={20} />
+                                    </div>
+                                    <div className="mt-auto">
+                                        <h3 className="text-base font-black text-white leading-tight mb-0.5">{theme.label}</h3>
+                                        <p className="text-[8px] font-bold text-white/70 uppercase tracking-widest">{theme.subLabel}</p>
+                                    </div>
+                                </div>
                             </button>
                         );
                     })}
@@ -273,8 +288,8 @@ export const Discover: React.FC<DiscoverProps> = ({
                         </div>
                         <div className="grid grid-cols-1 gap-4">
                             {discoveredWords.map(word => (
-                                <button
-                                    key={word.id}
+                                <button 
+                                    key={word.id} 
                                     onClick={() => setPreviewWord(word)}
                                     className="w-full bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm flex items-center justify-between group animate-fade-in relative overflow-hidden text-left"
                                 >
@@ -310,14 +325,14 @@ export const Discover: React.FC<DiscoverProps> = ({
                 <div className="fixed inset-0 z-[120] flex items-end justify-center animate-fade-in bg-black/70 backdrop-blur-md px-4">
                     <div className="bg-white dark:bg-zinc-950 w-full max-w-md rounded-t-[3.5rem] animate-slide-up shadow-2xl flex flex-col p-8 pb-12 max-h-[85dvh] border-t border-white/10 relative">
                         <div className="w-12 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full mx-auto mb-6"></div>
-
+                        
                         <div className="flex justify-between items-center mb-8">
                             <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-full">
                                 <Sparkles size={16} className="text-indigo-500" />
                                 <span className="text-[11px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Yapay Zeka Keşfi</span>
                             </div>
                             <button onClick={() => setPreviewWord(null)} className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-full text-zinc-500 hover:text-black dark:hover:text-white transition-colors">
-                                <X size={20} />
+                                <X size={20}/>
                             </button>
                         </div>
 
@@ -329,7 +344,7 @@ export const Discover: React.FC<DiscoverProps> = ({
                                     <div className="text-3xl font-black text-indigo-600 drop-shadow-sm">{previewWord.translation}</div>
                                 </div>
                                 <div className="flex flex-col items-center gap-3">
-                                    <button
+                                    <button 
                                         onClick={() => handleSpeak(previewWord.term)}
                                         disabled={isSpeaking}
                                         className="w-16 h-16 rounded-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 flex items-center justify-center text-indigo-600 mx-auto shadow-md active:scale-90 transition-all disabled:opacity-50"
@@ -364,13 +379,13 @@ export const Discover: React.FC<DiscoverProps> = ({
                         </div>
 
                         <div className="pt-8 flex gap-3">
-                            <button
+                            <button 
                                 onClick={() => setPreviewWord(null)}
                                 className="flex-1 py-5 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-black rounded-3xl text-xs uppercase tracking-widest"
                             >
                                 Geç
                             </button>
-                            <button
+                            <button 
                                 onClick={() => handleAddDiscoveredWord(previewWord)}
                                 className="flex-[2.5] py-5 bg-indigo-600 text-white font-black rounded-3xl text-xs uppercase tracking-widest shadow-xl shadow-indigo-500/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
                             >

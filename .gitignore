@@ -2,12 +2,7 @@ node_modules
 dist
 build
 .env
-.env.local
-.env.*.local
-local.env
 .DS_Store
 .vscode
 coverage
 *.log
-.vitest
-android/app/google-services.json

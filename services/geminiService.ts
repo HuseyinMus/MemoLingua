@@ -2,54 +2,58 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { WordData, UserLevel, UserGoal, GeneratedStory, ChatMessage, WritingFeedback } from "../types";
 
-const modelId = "gemini-1.5-flash";
-const ttsModelId = "gemini-1.5-flash";
+const modelId = "gemini-3-flash-preview";
+const ttsModelId = "gemini-2.5-flash-preview-tts";
 
 const VOCAB_SYSTEM_INSTRUCTION = "You are a specialized English language tutor. When generating vocabulary cards, ALWAYS provide the 'translation' field in Turkish. Definitions should be in clear, simple English. Example sentences should be natural and contextually rich.";
 
 const getAi = () => {
-    const apiKey =
-        // @ts-ignore
-        (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) ||
-        // @ts-ignore
-        (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY) ||
-        // @ts-ignore
-        (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY);
+    // Explicitly check for API key in both import.meta.env and process.env
+    // This static access is required for bundlers to replace the variables correctly.
+    const apiKey = 
+      // @ts-ignore
+      (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_KEY) || 
+      // @ts-ignore
+      (typeof process !== 'undefined' && process.env?.VITE_API_KEY) ||
+      // @ts-ignore
+      (typeof process !== 'undefined' && process.env?.API_KEY);
 
-    if (!apiKey || apiKey === "YOUR_GEMINI_API_KEY") {
-        console.warn("Gemini API Key is missing or invalid.");
-        throw new Error("API_KEY_MISSING");
+    // Hardcoded fallback for production/demo stability
+    const finalKey = apiKey || "AIzaSyCpHO5HNsJb_Nq8pbhomSCFuIcCIxtfiP8";
+
+    if (!finalKey) {
+        console.error("Gemini API Key missing. Check .env for VITE_API_KEY");
     }
-    return new GoogleGenAI({ apiKey });
+    return new GoogleGenAI({ apiKey: finalKey });
 };
 
 function decode(base64: string) {
-    const binaryString = atob(base64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
 }
 
 async function decodeAudioData(
-    data: Uint8Array,
-    ctx: AudioContext,
-    sampleRate: number,
-    numChannels: number,
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
 ): Promise<AudioBuffer> {
-    const dataInt16 = new Int16Array(data.buffer);
-    const frameCount = dataInt16.length / numChannels;
-    const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
 
-    for (let channel = 0; channel < numChannels; channel++) {
-        const channelData = buffer.getChannelData(channel);
-        for (let i = 0; i < frameCount; i++) {
-            channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
-        }
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
     }
-    return buffer;
+  }
+  return buffer;
 }
 
 const sanitizeWord = (w: any): WordData => ({
@@ -100,11 +104,11 @@ export const generateContextualStory = async (level: UserLevel, topic: string): 
             }
         }
     });
-
+    
     // CRITICAL: response.text used as a primitive string to avoid circular structure errors
     const rawText = response.text || '{}';
     const parsed = JSON.parse(rawText);
-
+    
     return {
         id: String(parsed.id || crypto.randomUUID()),
         title: String(parsed.title || ''),
@@ -118,11 +122,11 @@ export const generateContextualStory = async (level: UserLevel, topic: string): 
 };
 
 export const generatePhrasalVerbBatch = async (
-    count: number,
-    level: UserLevel,
-    baseVerb: string,
-    tone: string,
-    existingWords: string[],
+    count: number, 
+    level: UserLevel, 
+    baseVerb: string, 
+    tone: string, 
+    existingWords: string[], 
     topic: string
 ): Promise<WordData[]> => {
     const ai = getAi();
@@ -161,7 +165,7 @@ export const summarizeVoiceSession = async (transcript: any[], level: UserLevel)
     const conversationText = transcript
         .map(t => `${String(t.role === 'user' ? 'Student' : 'Tutor')}: ${String(t.text || '')}`)
         .join('\n');
-
+    
     const response = await ai.models.generateContent({
         model: modelId,
         contents: `Analyze this English conversation. Student Level: ${level}. Transcript:\n${conversationText}`,
@@ -292,12 +296,18 @@ export const evaluateWriting = async (text: string, level: UserLevel): Promise<W
 };
 
 export const playGeminiAudio = async (base64: string): Promise<void> => {
-    const { audioManager } = await import('./audioManager');
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     try {
-        await audioManager.playPCMAudio(base64);
+        const buffer = await decodeAudioData(decode(base64), ctx, 24000, 1);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start();
+        source.onended = () => {
+            if (ctx.state !== 'closed') ctx.close();
+        };
     } catch (err) {
-        console.error('Gemini audio playback failed:', err);
-        throw err;
+        if (ctx.state !== 'closed') ctx.close();
     }
 };
 

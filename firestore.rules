@@ -1,40 +1,43 @@
-rules_version = '2';
 
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- HELPER FUNCTIONS ---
+    // --- YARDIMCI FONKSİYONLAR ---
     
-    // Check if the user is authenticated
+    // Kullanıcının giriş yapıp yapmadığını kontrol eder
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Check if the authenticated user matches the document ID
+    // İşlem yapan kişinin, verinin sahibi olup olmadığını kontrol eder
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // --- RULES ---
+    // --- KURALLAR ---
 
-    // 1. USER PRIVATE DATA
-    // Allows full access to the user's own data and all subcollections (words, history, sessions, etc.)
+    // 1. KULLANICI VERİLERİ (ÖZEL ALAN)
+    // Bu kural, 'users' koleksiyonundaki ana dokümanı VE onun altındaki 
+    // tüm alt koleksiyonları (words, history, voiceSessions, settings vb.) kapsar.
+    // {document=**} "recursive wildcard" sayesinde tek kural ile tüm alt yapıyı koruyoruz.
     match /users/{userId}/{document=**} {
       allow read, write: if isOwner(userId);
     }
 
-    // 2. LEADERBOARD (PUBLIC READ, OWNER WRITE)
-    // Allows all authenticated users to read the leaderboard to see rankings.
-    // Allows users to update ONLY their own score/entry.
+    // 2. LİDERLİK TABLOSU (YARI GENEL ALAN)
+    // Oyun/Arena modunda sıralamayı göstermek için kullanılır.
     match /leaderboard/{userId} {
+      // OKUMA: Giriş yapmış herhangi bir kullanıcı, sıralamayı görmek için 
+      // diğer kullanıcıların skorlarını okuyabilir.
       allow read: if isSignedIn();
+      
+      // YAZMA: Bir kullanıcı sadece KENDİ skorunu veya bilgilerini güncelleyebilir.
+      // Başkasının skorunu değiştiremez.
       allow write: if isOwner(userId);
-    }
-
-    // 3. DEFAULT DENY
-    // Explicitly deny access to any other documents not matched above
-    match /{document=**} {
-      allow read, write: if false;
+      
+      // İsteğe bağlı: Veri doğrulama eklenebilir (örn: XP negatif olamaz)
+      // allow write: if isOwner(userId) && request.resource.data.xp >= 0;
     }
   }
 }

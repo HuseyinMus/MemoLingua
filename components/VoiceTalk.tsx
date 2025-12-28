@@ -15,35 +15,35 @@ interface VoiceTalkProps {
 }
 
 const EXAM_SCENARIOS = [
-    {
-        id: 'mastery',
-        label: 'Vocab Mastery',
-        subLabel: 'Öğrendiğin kelimelerle pratik',
-        icon: Sparkles,
+    { 
+        id: 'mastery', 
+        label: 'Vocab Mastery', 
+        subLabel: 'Öğrendiğin kelimelerle pratik', 
+        icon: Sparkles, 
         color: 'from-zinc-200 to-zinc-400',
         instruction: "Focus on testing the user's recently learned vocabulary. Be patient with their pronunciation. If they struggle, provide subtle hints."
     },
-    {
-        id: 'ielts',
-        label: 'IELTS Speaking',
-        subLabel: 'Band 9 Interview',
-        icon: GraduationCap,
+    { 
+        id: 'ielts', 
+        label: 'IELTS Speaking', 
+        subLabel: 'Band 9 Interview', 
+        icon: GraduationCap, 
         color: 'from-indigo-400 to-indigo-600',
         instruction: "Act as a formal IELTS examiner. Follow the interview structure. Focus on fluency, coherence, lexical resource, and grammatical range."
     },
-    {
-        id: 'daily',
-        label: 'Daily Chat',
-        subLabel: 'Günlük Sohbet',
-        icon: Zap,
+    { 
+        id: 'daily', 
+        label: 'Daily Chat', 
+        subLabel: 'Günlük Sohbet', 
+        icon: Zap, 
         color: 'from-emerald-400 to-emerald-600',
         instruction: "Be a friendly language partner. Talk about daily topics like hobbies, weather, or work. Keep the flow natural and encouraging."
     },
-    {
-        id: 'toefl',
-        label: 'TOEFL iBT',
-        subLabel: 'Academic Task',
-        icon: BookOpen,
+    { 
+        id: 'toefl', 
+        label: 'TOEFL iBT', 
+        subLabel: 'Academic Task', 
+        icon: BookOpen, 
         color: 'from-amber-400 to-amber-600',
         instruction: "Act as a university professor discussing an academic topic. Ask the user to explain concepts or provide their opinion on scholarly matters."
     },
@@ -54,14 +54,14 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
     const [isActive, setIsActive] = useState(false);
     const [isConnecting, setIsConnecting] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-
+    
     const [transcriptHistory, setTranscriptHistory] = useState<ChatMessage[]>([]);
     const [currentInput, setCurrentInput] = useState('');
     const [currentOutput, setCurrentOutput] = useState('');
     const [selectedScenario, setSelectedScenario] = useState(EXAM_SCENARIOS[0]);
     const [isMuted, setIsMuted] = useState(false);
-    const [inputVolume, setInputVolume] = useState(0);
-
+    const [inputVolume, setInputVolume] = useState(0); 
+    
     const [currentReport, setCurrentReport] = useState<NonNullable<VoiceSession['analysis']>>({
         fluencyScore: 0, grammarFeedback: '', vocabularyUsed: [], suggestions: []
     });
@@ -104,29 +104,30 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
     const startSession = async () => {
         setIsConnecting(true);
         isStoppingRef.current = false;
-
-        const apiKey =
-            // @ts-ignore
-            (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) ||
-            // @ts-ignore
-            (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY) ||
-            // @ts-ignore
-            (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY);
+        
+        const apiKey = 
+          // @ts-ignore
+          (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_KEY) || 
+          // @ts-ignore
+          (typeof process !== 'undefined' && process.env?.VITE_API_KEY) ||
+          // @ts-ignore
+          (typeof process !== 'undefined' && process.env?.API_KEY) ||
+          "AIzaSyCpHO5HNsJb_Nq8pbhomSCFuIcCIxtfiP8";
 
         const ai = new GoogleGenAI({ apiKey });
-
-        const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)(); // Use default sample rate
+        
+        const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
         const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         audioContextRef.current = inputCtx;
         outputAudioContextRef.current = outputCtx;
-
+        
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
+            const stream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
                     autoGainControl: true
-                }
+                } 
             });
             streamRef.current = stream;
 
@@ -145,7 +146,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
             `;
 
             const sessionPromise = ai.live.connect({
-                model: 'gemini-2.0-flash-exp',
+                model: 'gemini-2.5-flash-native-audio-preview-09-2025',
                 callbacks: {
                     onopen: () => {
                         const source = inputCtx.createMediaStreamSource(stream);
@@ -159,7 +160,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
                             if (isStoppingRef.current) return;
                             analyser.getByteFrequencyData(dataArray);
                             let sum = 0;
-                            for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
+                            for(let i=0; i<bufferLength; i++) sum += dataArray[i];
                             const average = sum / bufferLength;
                             setInputVolume(average);
                             requestAnimationFrame(updateVolume);
@@ -170,37 +171,17 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
                         scriptProcessor.onaudioprocess = (e) => {
                             if (isMuted || isStoppingRef.current) return;
                             const inputData = e.inputBuffer.getChannelData(0);
-
-                            // Manual Downsampling
-                            const targetRate = 16000;
-                            const currentRate = inputCtx.sampleRate;
-                            let finalData = inputData;
-
-                            if (currentRate !== targetRate) {
-                                const ratio = currentRate / targetRate;
-                                const newLength = Math.floor(inputData.length / ratio);
-                                const result = new Float32Array(newLength);
-                                for (let i = 0; i < newLength; i++) {
-                                    const offset = Math.floor(i * ratio);
-                                    result[i] = inputData[offset];
-                                }
-                                finalData = result;
-                            }
-
-                            const l = finalData.length;
+                            const l = inputData.length;
                             const int16 = new Int16Array(l);
-                            for (let i = 0; i < l; i++) {
-                                const s = Math.max(-1, Math.min(1, finalData[i]));
-                                int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-                            }
+                            for (let i = 0; i < l; i++) int16[i] = inputData[i] * 32768;
                             const pcmBlob = { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' };
                             sessionPromise.then(s => {
-                                try { s.sendRealtimeInput({ media: pcmBlob }); } catch (err) { }
+                                try { s.sendRealtimeInput({ media: pcmBlob }); } catch(err) {}
                             });
                         };
                         source.connect(scriptProcessor);
                         scriptProcessor.connect(inputCtx.destination);
-
+                        
                         setIsConnecting(false);
                         setIsActive(true);
                         setView('active');
@@ -209,14 +190,14 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
                     onmessage: async (msg: LiveServerMessage) => {
                         if (isStoppingRef.current) return;
                         if (msg.serverContent?.inputTranscription) {
-                            setCurrentInput(msg.serverContent.inputTranscription.text || '');
+                            setCurrentInput(msg.serverContent.inputTranscription.text);
                         }
                         if (msg.serverContent?.outputTranscription) {
-                            setCurrentOutput(prev => prev + (msg.serverContent!.outputTranscription!.text || ''));
+                            setCurrentOutput(prev => prev + msg.serverContent!.outputTranscription!.text);
                         }
                         if (msg.serverContent?.turnComplete) {
                             setTranscriptHistory(prev => [
-                                ...prev,
+                                ...prev, 
                                 { id: crypto.randomUUID(), role: 'user', text: currentInput, timestamp: Date.now() },
                                 { id: crypto.randomUUID(), role: 'ai', text: currentOutput, timestamp: Date.now() }
                             ]);
@@ -256,21 +237,21 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
     const stopSession = async () => {
         if (isStoppingRef.current) return;
         isStoppingRef.current = true;
-
+        
         clearInterval(timerRef.current);
-        try { sessionRef.current?.close(); } catch (e) { }
+        try { sessionRef.current?.close(); } catch(e) {}
         streamRef.current?.getTracks().forEach(t => t.stop());
-
+        
         if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-            try { await audioContextRef.current.close(); } catch (e) { }
+            try { await audioContextRef.current.close(); } catch(e) {}
         }
         if (outputAudioContextRef.current && outputAudioContextRef.current.state !== 'closed') {
-            try { await outputAudioContextRef.current.close(); } catch (e) { }
+            try { await outputAudioContextRef.current.close(); } catch(e) {}
         }
-
+        
         setIsActive(false);
-
-        if (transcriptHistory.length > 1) {
+        
+        if (transcriptHistory.length > 1) { 
             setIsAnalyzing(true);
             try {
                 // Ensure we only pass string values to prevent circular structure errors
@@ -278,26 +259,11 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
                     role: t.role,
                     text: String(t.text || '')
                 }));
-
-                // Add timeout to prevent hanging
-                const analysisPromise = summarizeVoiceSession(sanitizedHistory, userProfile?.level || 'A1');
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Analysis timeout')), 10000)
-                );
-
-                const report = await Promise.race([analysisPromise, timeoutPromise]) as any;
+                const report = await summarizeVoiceSession(sanitizedHistory, userProfile?.level || 'A1');
                 setCurrentReport(report);
                 setView('report');
             } catch (e) {
-                console.error('Analysis failed:', e);
-                // Fallback: Show basic report
-                setCurrentReport({
-                    fluencyScore: Math.min(85, transcriptHistory.length * 10),
-                    grammarFeedback: 'Harika bir konuşma yaptın! Daha detaylı analiz için lütfen tekrar dene.',
-                    vocabularyUsed: [],
-                    suggestions: ['Daha fazla pratik yap', 'Kelime dağarcığını genişlet']
-                });
-                setView('report');
+                setView('menu');
             } finally {
                 setIsAnalyzing(false);
             }
@@ -309,7 +275,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
     const handleAddReportWords = async () => {
         setIsAnalyzing(true);
         try {
-            const wordPromises = currentReport.vocabularyUsed.slice(0, 5).map(term =>
+            const wordPromises = currentReport.vocabularyUsed.slice(0, 5).map(term => 
                 generateSingleWord(term, userProfile?.level || 'A1')
             );
             const words = await Promise.all(wordPromises);
@@ -346,7 +312,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
                         <div className="space-y-2 mb-6">
                             {EXAM_SCENARIOS.map(s => (
                                 <button key={s.id} onClick={() => setSelectedScenario(s)} className={`w-full p-5 rounded-[2rem] border flex items-center gap-4 transition-all duration-300 ${selectedScenario.id === s.id ? 'bg-zinc-900 border-indigo-500/50 shadow-lg shadow-indigo-500/5' : 'bg-transparent border-transparent opacity-40 hover:opacity-100'}`}>
-                                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${s.color} flex items-center justify-center text-black shadow-lg`}><s.icon size={24} /></div>
+                                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${s.color} flex items-center justify-center text-black shadow-lg`}><s.icon size={24}/></div>
                                     <div className="text-left">
                                         <p className="font-black text-sm">{s.label}</p>
                                         <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{s.subLabel}</p>
@@ -355,7 +321,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
                             ))}
                         </div>
                         <button onClick={startSession} disabled={isConnecting} className="w-full py-5 bg-white text-black font-black rounded-[2.5rem] shadow-2xl shadow-white/10 flex items-center justify-center gap-3 active:scale-95 transition-all">
-                            {isConnecting ? <Loader2 className="animate-spin" /> : <Zap size={20} fill="currentColor" />}
+                            {isConnecting ? <Loader2 className="animate-spin" /> : <Zap size={20} fill="currentColor"/>}
                             {isConnecting ? 'KOÇ BAĞLANILIYOR...' : 'SOHBETİ BAŞLAT'}
                         </button>
                     </div>
@@ -368,10 +334,10 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
                             <div className={`w-56 h-56 rounded-full bg-white flex items-center justify-center transition-all duration-300 relative z-10 ${currentOutput ? 'scale-110 shadow-[0_0_80px_rgba(255,255,255,0.3)]' : 'scale-100 opacity-40'}`}>
                                 <Waves size={80} className={`text-black transition-transform duration-100 ${currentOutput ? 'animate-pulse' : ''}`} style={{ transform: `scale(${1 + (inputVolume / 100)})` }} />
                             </div>
-
+                            
                             <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-32 h-1.5 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
-                                <div
-                                    className="h-full bg-indigo-500 transition-all duration-75"
+                                <div 
+                                    className="h-full bg-indigo-500 transition-all duration-75" 
                                     style={{ width: `${Math.min(100, inputVolume * 2)}%` }}
                                 ></div>
                             </div>
@@ -408,7 +374,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
                             <p className="text-[10px] font-black opacity-40 uppercase tracking-widest mb-1">Fluency Score</p>
                             <h3 className="text-6xl font-black">%{currentReport.fluencyScore}</h3>
                             <div className="mt-4 inline-flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full text-xs font-bold text-zinc-400">
-                                <Clock size={14} /> {Math.floor(sessionDuration / 60)}dk {(sessionDuration % 60)}sn
+                                <Clock size={14}/> {Math.floor(sessionDuration / 60)}dk {(sessionDuration % 60)}sn
                             </div>
                         </div>
 
@@ -425,7 +391,7 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
                                         <span key={i} className="px-3 py-1 bg-white/10 rounded-lg text-xs font-bold">{v}</span>
                                     ))}
                                 </div>
-                                <button
+                                <button 
                                     onClick={handleAddReportWords}
                                     className="w-full mt-4 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-indigo-600/20"
                                 >
