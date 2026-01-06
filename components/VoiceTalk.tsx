@@ -111,8 +111,14 @@ export const VoiceTalk: React.FC<VoiceTalkProps> = ({ userProfile, recentWords, 
           // @ts-ignore
           (typeof process !== 'undefined' && process.env?.VITE_API_KEY) ||
           // @ts-ignore
-          (typeof process !== 'undefined' && process.env?.API_KEY) ||
-          "AIzaSyCpHO5HNsJb_Nq8pbhomSCFuIcCIxtfiP8";
+          (typeof process !== 'undefined' && process.env?.API_KEY);
+
+        if (!apiKey) {
+            console.error("Gemini API Key missing. Check .env for VITE_API_KEY or API_KEY");
+            setIsConnecting(false);
+            alert("API Anahtarı bulunamadı. Lütfen .env dosyanızı kontrol edin.");
+            return;
+        }
 
         const ai = new GoogleGenAI({ apiKey });
         

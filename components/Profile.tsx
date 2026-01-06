@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Settings as SettingsIcon, Trophy, Target, Star, Shield, Flame, BarChart3, LogOut, ArrowRight, CheckCircle2, Medal, Zap, Award, Crown, Calendar, Sparkles, ChevronRight, BookOpen, Gamepad2 } from 'lucide-react';
+import { Settings as SettingsIcon, Trophy, Target, Star, Shield, Flame, BarChart3, ArrowRight, CheckCircle2, Medal, Zap, Award, Crown, Calendar, Sparkles, ChevronRight, BookOpen, Gamepad2, Trash2 } from 'lucide-react';
 import { UserProfile, UserWord, Quest } from '../types';
 
 interface ProfileProps {
@@ -245,15 +245,12 @@ export const Profile: React.FC<ProfileProps> = ({ userProfile, words, onUpdatePr
                 </div>
             </div>
 
-            {/* Logout Footer */}
+            {/* Application Info Footer */}
             <div className="pt-4 pb-12">
-                <button 
-                    onClick={onSignOut} 
-                    className="w-full py-5 bg-red-50 dark:bg-red-900/10 text-red-500 font-black text-[10px] uppercase tracking-[0.2em] rounded-[2.5rem] border border-red-100 dark:border-red-900/20 active:scale-95 transition-all flex items-center justify-center gap-3"
-                >
-                    <LogOut size={16} /> Oturumu Kapat
-                </button>
-                <p className="text-center text-[9px] font-black text-zinc-300 dark:text-zinc-700 mt-6 uppercase tracking-widest">MemoLingua v1.2.5 • AI Engine</p>
+                <div className="text-center">
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-1">MEMOLINGUA GUEST MODE</p>
+                    <p className="text-[9px] font-bold text-zinc-300 dark:text-zinc-700 uppercase tracking-widest">Tüm veriler cihazında saklanır.</p>
+                </div>
             </div>
         </div>
     );

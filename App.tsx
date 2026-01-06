@@ -2,16 +2,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { UserWord, AppView, SRSState, UserProfile, StudyMode, UserLevel, UserGoal, GeneratedStory, LeaderboardEntry, WordData, ChatMessage, SRSHistoryItem, Quest } from './types';
 import { generateDailyBatch, generateAudio, playGeminiAudio, generateContextualStory, generateSingleWord, generateRoleplayResponse, generatePhrasalVerbBatch } from './services/geminiService';
-import { auth, db } from './services/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, onSnapshot, writeBatch, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 import { Navigation } from './components/Navigation';
 import { StudyCard } from './components/StudyCard';
-import { Onboarding } from './components/Onboarding';
 import { Games } from './components/Games';
 import { Settings } from './components/Settings';
-import { Auth } from './components/Auth';
 import { VoiceTalk } from './components/VoiceTalk';
 import { Collection } from './components/Collection';
 import { Discover } from './components/Discover';
@@ -19,67 +14,98 @@ import { Studio } from './components/Studio';
 import { Profile } from './components/Profile';
 import { Shimmer } from './components/Shimmer';
 
-import { Sparkles, Zap, Layers, Volume2, Settings as SettingsIcon, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Mic, BookMarked, BarChart3, Camera, Wand2, Plus, Command, Check, Brain, Activity } from 'lucide-react';
+import { Sparkles, Zap, Layers, Volume2, ArrowLeft, Trophy, Target, CheckCircle2, MoreHorizontal, BookOpen, Search, ArrowRight, Flame, BrainCircuit, Play, Edit2, X, Send, MessageSquare, Loader2, Snowflake, Mic, BookMarked, BarChart3, Camera, Wand2, Plus, Command, Check, Brain, Activity } from 'lucide-react';
 
-const cleanProfile = (data: any): UserProfile => {
-    if (!data) throw new Error("Profile data is missing");
-    return {
-        email: String(data.email || ''),
-        username: String(data.username || 'Öğrenci'),
-        avatar: String(data.avatar || '🎓'),
-        level: (data.level || 'A1') as UserLevel,
-        goal: (data.goal || 'General English') as UserGoal,
-        hasCompletedOnboarding: !!data.hasCompletedOnboarding,
-        hasSeenTour: !!data.hasSeenTour,
-        dailyTarget: Number(data.dailyTarget) || 10,
-        studyTime: String(data.studyTime || '09:00'),
-        lastGeneratedDate: String(data.lastGeneratedDate || ''),
-        wordsStudiedToday: Number(data.wordsStudiedToday) || 0,
-        lastStudyDate: String(data.lastStudyDate || new Date().toDateString()),
-        xp: Number(data.xp) || 0,
-        streakFreeze: Number(data.streakFreeze) || 0,
-        streak: Number(data.streak) || 0,
-        longestStreak: Number(data.longestStreak) || 0,
-        league: (data.league || 'Bronze') as any,
-        theme: (data.theme || 'system') as any,
-        uid: data.uid ? String(data.uid) : undefined,
-        settings: {
-            autoPlayAudio: !!(data.settings?.autoPlayAudio ?? true),
-            notifications: !!(data.settings?.notifications ?? true),
-            soundEffects: !!(data.settings?.soundEffects ?? true),
-        }
-    };
+const STORAGE_KEYS = {
+    PROFILE: 'memolingua_user_profile',
+    WORDS: 'memolingua_user_words'
 };
 
-const cleanWord = (data: any): UserWord => {
+const createDefaultProfile = (): UserProfile => ({
+    email: 'guest@local',
+    username: 'MemoLingua Öğrencisi',
+    avatar: '🎓',
+    level: 'A1',
+    goal: 'General English',
+    hasCompletedOnboarding: true,
+    hasSeenTour: true,
+    dailyTarget: 10,
+    studyTime: '09:00',
+    lastGeneratedDate: '',
+    wordsStudiedToday: 0,
+    lastStudyDate: new Date().toDateString(),
+    xp: 0,
+    streakFreeze: 0,
+    streak: 0,
+    longestStreak: 0,
+    league: 'Bronze',
+    theme: 'system',
+    settings: {
+        autoPlayAudio: true,
+        notifications: true,
+        soundEffects: true,
+    }
+});
+
+const cleanProfile = (data: any): UserProfile => {
     return {
-        id: String(data.id),
-        term: String(data.term || ''),
-        translation: String(data.translation || ''),
-        definition: String(data.definition || ''),
-        exampleSentence: String(data.exampleSentence || ''),
-        pronunciation: String(data.pronunciation || ''),
-        phoneticSpelling: String(data.phoneticSpelling || ''),
-        type: String(data.type || 'noun'),
-        dateAdded: Number(data.dateAdded) || Date.now(),
-        srs: {
-            nextReview: Number(data.srs?.nextReview) || Date.now(),
-            interval: Number(data.srs?.interval) || 0,
-            easeFactor: Number(data.srs?.easeFactor) || 2.5,
-            streak: Number(data.srs?.streak) || 0
+        email: String(data?.email || 'guest@local'),
+        username: String(data?.username || 'MemoLingua Öğrencisi'),
+        avatar: String(data?.avatar || '🎓'),
+        level: (data?.level || 'A1') as UserLevel,
+        goal: (data?.goal || 'General English') as UserGoal,
+        hasCompletedOnboarding: true,
+        hasSeenTour: true,
+        dailyTarget: Number(data?.dailyTarget) || 10,
+        studyTime: String(data?.studyTime || '09:00'),
+        lastGeneratedDate: String(data?.lastGeneratedDate || ''),
+        wordsStudiedToday: Number(data?.wordsStudiedToday) || 0,
+        lastStudyDate: String(data?.lastStudyDate || new Date().toDateString()),
+        xp: Number(data?.xp) || 0,
+        streakFreeze: Number(data?.streakFreeze) || 0,
+        streak: Number(data?.streak) || 0,
+        longestStreak: Number(data?.longestStreak) || 0,
+        league: (data?.league || 'Bronze') as any,
+        theme: (data?.theme || 'system') as any,
+        settings: {
+            autoPlayAudio: !!(data?.settings?.autoPlayAudio ?? true),
+            notifications: !!(data?.settings?.notifications ?? true),
+            soundEffects: !!(data?.settings?.soundEffects ?? true),
         }
     };
 };
 
 export default function App() {
-  const [view, setView] = useState<AppView>(AppView.AUTH);
+  const [view, setView] = useState<AppView>(AppView.DASHBOARD);
   const [words, setWords] = useState<UserWord[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
-  const [loadingWords, setLoadingWords] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [isGeneratingWords, setIsGeneratingWords] = useState(false);
   const [generatedBatch, setGeneratedBatch] = useState<WordData[] | null>(null);
   
+  // Initial Load from Local Storage
+  useEffect(() => {
+    const savedProfile = localStorage.getItem(STORAGE_KEYS.PROFILE);
+    const savedWords = localStorage.getItem(STORAGE_KEYS.WORDS);
+    
+    let profile: UserProfile;
+    if (savedProfile) {
+        profile = cleanProfile(JSON.parse(savedProfile));
+    } else {
+        profile = createDefaultProfile();
+        localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
+    }
+    
+    setUserProfile(profile);
+    setView(AppView.DASHBOARD);
+
+    if (savedWords) {
+        setWords(JSON.parse(savedWords));
+    }
+    setLoading(false);
+  }, []);
+
+  // Theme Sync
   useEffect(() => {
     const theme = userProfile?.theme || 'system';
     const root = window.document.documentElement;
@@ -95,127 +121,15 @@ export default function App() {
     }
   }, [userProfile?.theme]);
 
-  useEffect(() => {
-    let unsubscribeWords: () => void;
-    let unsubscribeProfile: () => void;
-    let isMounted = true;
-    let initialRedirectDone = false;
-    let safetyTimeout: NodeJS.Timeout;
-
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-        if (!isMounted) return;
-        setLoadingAuth(true);
-        setLoadingWords(true); // Always start loading words when auth changes
-
-        if (user) {
-            // 1. Fetch Profile Data (Real-time listener)
-            const userDocRef = doc(db, "users", user.uid);
-            unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    const profileData = cleanProfile(data);
-                    setUserProfile(prev => ({ 
-                        ...profileData, 
-                        uid: user.uid, 
-                        email: user.email || prev?.email || '' 
-                    }));
-                } else {
-                    // Profile might be creating... let's wait or keep null
-                }
-            }, (err) => {
-                console.warn("Profil izleme hatası:", err);
-            });
-
-            // 2. Setup Words Listener
-            const wordsCollectionRef = collection(db, "users", user.uid, "words");
-            
-            // Safety Timeout: Force app load if Firestore hangs
-            safetyTimeout = setTimeout(() => {
-                if (isMounted && !initialRedirectDone) {
-                    console.warn("Firestore snapshot timeout. Forcing UI load.");
-                    setLoadingWords(false);
-                    setLoadingAuth(false);
-                    // Fallback routing if timeout
-                    setView(AppView.DASHBOARD);
-                    initialRedirectDone = true;
-                }
-            }, 8000);
-
-            unsubscribeWords = onSnapshot(wordsCollectionRef, async (snapshot) => {
-                if (!isMounted) return;
-                clearTimeout(safetyTimeout);
-                
-                const fetchedWords = snapshot.docs.map(doc => cleanWord({ ...doc.data(), id: doc.id }));
-                setWords(fetchedWords);
-                setLoadingWords(false);
-                
-                // Routing Logic
-                if (!initialRedirectDone) {
-                    // We need to check profile status for onboarding.
-                    // Since profile snapshot is async/independent, we fetch once here for the decision.
-                    try {
-                        const snap = await getDoc(userDocRef);
-                        const hasOnboarded = snap.exists() ? snap.data().hasCompletedOnboarding : false;
-                        
-                        if (!hasOnboarded) {
-                            setView(AppView.ONBOARDING);
-                        } else if (fetchedWords.length === 0) {
-                            setView(AppView.DISCOVER);
-                        } else {
-                            setView(AppView.DASHBOARD);
-                        }
-                    } catch (e) {
-                         // On error, default to Dashboard or Onboarding?
-                         setView(AppView.DASHBOARD);
-                    }
-                    initialRedirectDone = true;
-                    setLoadingAuth(false);
-                }
-            }, (err) => {
-                clearTimeout(safetyTimeout);
-                console.warn("Kelimeler yüklenirken hata oluştu (Offline mode).", err);
-                setLoadingWords(false);
-                
-                if (!initialRedirectDone) {
-                     setView(AppView.DASHBOARD);
-                     initialRedirectDone = true;
-                     setLoadingAuth(false);
-                }
-            });
-
-        } else {
-            if(isMounted) { 
-                setUserProfile(null); 
-                setView(AppView.AUTH); 
-                setWords([]); 
-                setLoadingAuth(false);
-                setLoadingWords(false);
-            }
-        }
-    });
-
-    return () => { 
-        isMounted = false; 
-        clearTimeout(safetyTimeout);
-        unsubscribeAuth(); 
-        if (unsubscribeWords) unsubscribeWords(); 
-        if (unsubscribeProfile) unsubscribeProfile();
-    };
-  }, []);
-
-  const saveProfile = async (profile: UserProfile) => {
+  const saveProfile = (profile: UserProfile) => {
     const cleaned = cleanProfile(profile);
     setUserProfile(cleaned);
-    try {
-        if (auth.currentUser) {
-            const firestoreData = Object.fromEntries(
-                Object.entries(cleaned).filter(([_, v]) => v !== undefined)
-            );
-            await setDoc(doc(db, "users", auth.currentUser.uid), firestoreData, { merge: true });
-        }
-    } catch (err) {
-        console.warn("Profil kaydedilemedi, geçici oturum devam ediyor.", err);
-    }
+    localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(cleaned));
+  };
+
+  const saveWordsToLocal = (newWords: UserWord[]) => {
+      setWords(newWords);
+      localStorage.setItem(STORAGE_KEYS.WORDS, JSON.stringify(newWords));
   };
 
   const handleAddXP = (amount: number) => {
@@ -228,30 +142,14 @@ export default function App() {
       saveProfile({ ...userProfile, [key]: value });
   };
 
-  const handleAddWords = async (newWords: WordData[]) => {
-      if (!auth.currentUser) return;
-      
-      const newLocalWords = newWords.map(word => cleanWord({
+  const handleAddWords = (newWords: WordData[]) => {
+      const formattedWords = newWords.map(word => ({
             ...word,
             dateAdded: Date.now(),
             srs: { nextReview: Date.now(), interval: 0, easeFactor: 2.5, streak: 0 }
       }));
-      setWords(prev => [...prev, ...newLocalWords]);
-
-      try {
-          const batch = writeBatch(db);
-          newWords.forEach(word => {
-              const docRef = doc(collection(db, "users", auth.currentUser!.uid, "words"));
-              batch.set(docRef, cleanWord({
-                  ...word,
-                  dateAdded: Date.now(),
-                  srs: { nextReview: Date.now(), interval: 0, easeFactor: 2.5, streak: 0 }
-              }));
-          });
-          await batch.commit();
-      } catch (err) {
-          console.warn("Kelimeler veritabanına kaydedilemedi (Offline mode).");
-      }
+      const updatedWordsList = [...words, ...formattedWords];
+      saveWordsToLocal(updatedWordsList);
   };
 
   const handleGenerateDailyBatch = async () => {
@@ -260,19 +158,19 @@ export default function App() {
       try {
           const existingTerms = words.map(w => w.term);
           const newWords = await generateDailyBatch(userProfile.dailyTarget, userProfile.level, userProfile.goal, existingTerms);
-          await handleAddWords(newWords);
+          handleAddWords(newWords);
           handleUpdateProfile('lastGeneratedDate', new Date().toDateString());
           handleAddXP(50);
           setGeneratedBatch(newWords);
       } catch (e) { console.error(e); } finally { setIsGeneratingWords(false); }
   };
 
-  const updateSRS = async (word: UserWord, grade: 'again' | 'hard' | 'good' | 'easy') => {
-      if (!auth.currentUser) return;
+  const updateSRS = (word: UserWord, grade: 'again' | 'hard' | 'good' | 'easy') => {
       const dayInMs = 24 * 60 * 60 * 1000;
       let newInterval = word.srs.interval;
       let newEase = word.srs.easeFactor;
       let nextReview = Date.now();
+
       if (grade === 'again') {
           newInterval = 0;
           nextReview = Date.now() + (10 * 60 * 1000); 
@@ -299,20 +197,9 @@ export default function App() {
           }
       };
 
-      setWords(prev => prev.map(w => w.id === word.id ? updatedWord : w));
-
-      try {
-          const wordDocRef = doc(db, "users", auth.currentUser.uid, "words", word.id);
-          await updateDoc(wordDocRef, {
-              "srs.nextReview": nextReview,
-              "srs.interval": newInterval,
-              "srs.easeFactor": newEase,
-              "srs.streak": grade === 'again' ? 0 : (word.srs.streak + 1)
-          });
-          handleAddXP(10);
-      } catch (err) {
-          console.warn("SRS güncellenemedi (Offline mode).");
-      }
+      const newWordsList = words.map(w => w.id === word.id ? updatedWord : w);
+      saveWordsToLocal(newWordsList);
+      handleAddXP(10);
   };
 
   const dueWords = useMemo(() => {
@@ -353,14 +240,14 @@ export default function App() {
     return Math.round(totalScore / words.length);
   }, [words]);
 
-  if (loadingAuth) return (
+  if (loading) return (
     <div className="h-screen w-screen flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-10 space-y-6">
         <div className="w-20 h-20 bg-black dark:bg-white rounded-[2rem] flex items-center justify-center animate-bounce shadow-2xl">
             <Sparkles size={32} className="text-white dark:text-black" />
         </div>
-        <div className="w-full max-w-xs space-y-3">
+        <div className="w-full max-w-xs space-y-3 text-center">
+            <p className="font-black tracking-tighter uppercase text-xs text-zinc-400">MemoLingua</p>
             <Shimmer className="h-4 w-3/4 mx-auto" />
-            <Shimmer className="h-2 w-1/2 mx-auto" />
         </div>
     </div>
   );
@@ -368,26 +255,13 @@ export default function App() {
   return (
     <div className="h-[100dvh] w-full bg-zinc-50 dark:bg-zinc-950 text-black dark:text-white font-sans overflow-hidden flex flex-col transition-colors duration-500">
         <main className="flex-1 w-full overflow-hidden relative">
-            {view === AppView.AUTH && <Auth onLoginSuccess={() => {}} />}
-            {view === AppView.ONBOARDING && (
-                <Onboarding onComplete={(p) => {
-                    // Ensure we keep the username from the existing profile (fetched via snapshot) 
-                    // or fall back to the one passed (though onboarding usually doesn't pass username)
-                    const updatedProfile = { 
-                        ...p, 
-                        username: userProfile?.username || p.username || 'Öğrenci' 
-                    };
-                    saveProfile(updatedProfile);
-                    setView(AppView.DASHBOARD);
-                }} />
-            )}
             {view === AppView.DASHBOARD && (
                 <div className="h-full overflow-y-auto p-6 space-y-6 max-w-md mx-auto pt-12 scrollbar-hide animate-fade-in">
                     <header className="flex justify-between items-center mb-2">
                         <div className="flex items-center gap-3">
                             <button onClick={() => setView(AppView.PROFILE)} className="w-10 h-10 rounded-full bg-white dark:bg-zinc-900 flex items-center justify-center text-xl shadow-lg border border-zinc-100 dark:border-white/10 active:scale-90 transition-transform">{userProfile?.avatar}</button>
                             <div>
-                                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Kullanıcı Adı</p>
+                                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">MemoLingua Öğrencisi</p>
                                 <h2 className="font-black text-lg">{userProfile?.username}</h2>
                             </div>
                         </div>
@@ -433,7 +307,7 @@ export default function App() {
                         <button onClick={() => setView(AppView.COLLECTION)} className="bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm text-left active:scale-95 transition-all group">
                              <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform"><BookMarked size={20} /></div>
                              <h4 className="font-bold text-sm">Koleksiyon</h4>
-                             {loadingWords ? <Shimmer className="h-2 w-12 mt-1" /> : <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">{words.length} Kelime</p>}
+                             <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">{words.length} Kelime</p>
                         </button>
                         <button onClick={() => setView(AppView.GAMES)} className="bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-100 dark:border-zinc-800 shadow-sm text-left active:scale-95 transition-all group">
                              <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center text-emerald-600 mb-6 group-hover:scale-110 transition-transform"><Trophy size={20} /></div>
@@ -466,10 +340,10 @@ export default function App() {
                 />
             )}
             {view === AppView.STUDIO && <Studio userLevel={userProfile?.level || 'A1'} onAddWords={handleAddWords} onAddXP={handleAddXP} />}
-            {view === AppView.COLLECTION && <Collection words={words} userLevel={userProfile?.level || 'A1'} onBack={() => setView(AppView.DASHBOARD)} loading={loadingWords} />}
+            {view === AppView.COLLECTION && <Collection words={words} userLevel={userProfile?.level || 'A1'} onBack={() => setView(AppView.DASHBOARD)} />}
             {view === AppView.GAMES && <Games words={words} userProfile={userProfile} onAddXP={handleAddXP} />}
-            {view === AppView.PROFILE && <Profile userProfile={userProfile} words={words} onUpdateProfile={handleUpdateProfile} onSignOut={() => signOut(auth)} onOpenSettings={() => setView(AppView.SETTINGS)} />}
-            {view === AppView.SETTINGS && <Settings userProfile={userProfile} words={words} onUpdateProfile={handleUpdateProfile} onBack={() => setView(AppView.PROFILE)} onClearData={() => {}} onSignOut={() => signOut(auth)} />}
+            {view === AppView.PROFILE && <Profile userProfile={userProfile} words={words} onUpdateProfile={handleUpdateProfile} onSignOut={() => {}} onOpenSettings={() => setView(AppView.SETTINGS)} />}
+            {view === AppView.SETTINGS && <Settings userProfile={userProfile} words={words} onUpdateProfile={handleUpdateProfile} onBack={() => setView(AppView.PROFILE)} onClearData={() => { localStorage.clear(); window.location.reload(); }} onSignOut={() => {}} />}
             {view === AppView.STUDY && (
                 <div className="h-full flex flex-col p-6 pt-12 animate-fade-in bg-zinc-50 dark:bg-zinc-950 transition-colors">
                      <header className="flex justify-between items-center mb-10">
@@ -530,7 +404,7 @@ export default function App() {
                 </div>
             </div>
         )}
-        {view !== AppView.AUTH && view !== AppView.ONBOARDING && view !== AppView.VOICE_TALK && view !== AppView.STUDY && <Navigation currentView={view} setView={setView} />}
+        {view !== AppView.VOICE_TALK && view !== AppView.STUDY && <Navigation currentView={view} setView={setView} />}
     </div>
   );
 }

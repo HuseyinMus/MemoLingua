@@ -42,8 +42,6 @@ export interface UserWord extends WordData {
 }
 
 export enum AppView {
-  AUTH = 'AUTH',
-  ONBOARDING = 'ONBOARDING',
   DASHBOARD = 'DASHBOARD',
   STUDY = 'STUDY',
   DISCOVER = 'DISCOVER',
